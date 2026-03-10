@@ -1,5 +1,3 @@
-from app import app
+from app import create_app
 
-# Se sua Flask app estiver em outro arquivo, ajuste:
-# from main import app
-# from src.app import app
+app = create_app()
