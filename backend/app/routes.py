@@ -162,12 +162,12 @@ def _can_manage_contract(user_role: str, user_id: int, contract: Contract) -> bo
     """
     ADMIN: pode tudo
     GESTOR/FISCAL: somente se estiver vinculado ao contrato
+    CONSULTA: sem permissão de escrita
     """
     if user_role == "ADMIN":
         return True
     if user_role in ("GESTOR", "FISCAL"):
-        # Ajuste aqui se seus campos tiverem outro nome:
-        return (getattr(contract, "gestor_id", None) == user_id) or (getattr(contract, "fiscal_id", None) == user_id)
+        return (contract.gestor_id == user_id) or (contract.fiscal_id == user_id)
     return False
 
 
@@ -182,12 +182,11 @@ def list_movements(contract_id: int):
         if not contract:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
-        # leitura permitida para todos autenticados (inclusive CONSULTA)
         rows = (
             db.execute(
                 select(SaldoMovement)
                 .where(SaldoMovement.contract_id == contract_id)
-                .order_by(SaldoMovement.data_movimento.desc())
+                .order_by(SaldoMovement.data_movimento.desc(), SaldoMovement.id.desc())
             )
             .scalars()
             .all()
@@ -197,13 +196,13 @@ def list_movements(contract_id: int):
             {
                 "id": m.id,
                 "contract_id": m.contract_id,
-                "data_movimento": m.data_movimento.isoformat() if m.data_movimento else None,
+                "data_movimento": m.data_movimento.isoformat(),
                 "tipo": m.tipo,
                 "valor": float(m.valor),
+                "numero_nf": m.numero_nf,
                 "descricao": m.descricao,
-                "numero_nf": getattr(m, "numero_nf", None),
-                "created_at": m.created_at.isoformat() if getattr(m, "created_at", None) else None,
-                "created_by": getattr(m, "created_by", None),
+                "created_by": m.created_by,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in rows
         ])
@@ -218,11 +217,12 @@ def create_movement(contract_id: int):
     Cria movimentação:
       - EXECUCAO: reduz saldo
       - ESTORNO: aumenta saldo
-      - AJUSTE: aumenta ou reduz conforme valor (recomendação: usar valor positivo e tipo define sentido, mas aqui seguimos seu modelo atual)
+      - AJUSTE: ajuste manual (seguimos seu cálculo atual)
     Regras:
       - ADMIN pode lançar em qualquer contrato
-      - GESTOR/FISCAL apenas nos contratos em que são responsáveis
+      - GESTOR/FISCAL apenas nos contratos onde são responsáveis
       - CONSULTA não pode lançar
+      - Sem delete/edição: correções via ESTORNO/AJUSTE
     """
     from flask import g
 
@@ -232,7 +232,6 @@ def create_movement(contract_id: int):
         if not contract:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
-        # Permissão de escrita
         if g.user_role == "CONSULTA":
             return jsonify({"error": "Forbidden"}), 403
 
@@ -255,37 +254,33 @@ def create_movement(contract_id: int):
         except Exception:
             return jsonify({"error": "data_movimento inválida (use YYYY-MM-DD)"}), 400
 
-        descricao = (data.get("descricao") or "").strip()
         numero_nf = (data.get("numero_nf") or "").strip() if data.get("numero_nf") is not None else None
+        descricao = (data.get("descricao") or "").strip() if data.get("descricao") is not None else None
 
-        # Cria registro
         m = SaldoMovement(
             contract_id=contract_id,
             data_movimento=data_movimento,
             tipo=tipo,
             valor=valor,
+            numero_nf=numero_nf,
             descricao=descricao,
+            created_by=g.user_id,
         )
-
-        # Se existir coluna numero_nf / created_by no seu model, preenche
-        if hasattr(m, "numero_nf"):
-            setattr(m, "numero_nf", numero_nf)
-        if hasattr(m, "created_by"):
-            setattr(m, "created_by", g.user_id)
 
         db.add(m)
         db.commit()
         db.refresh(m)
 
-        # Retorno
         return jsonify({
             "id": m.id,
             "contract_id": m.contract_id,
-            "data_movimento": m.data_movimento.isoformat() if m.data_movimento else None,
+            "data_movimento": m.data_movimento.isoformat(),
             "tipo": m.tipo,
             "valor": float(m.valor),
+            "numero_nf": m.numero_nf,
             "descricao": m.descricao,
-            "numero_nf": getattr(m, "numero_nf", None),
+            "created_by": m.created_by,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
         }), 201
 
     finally:
