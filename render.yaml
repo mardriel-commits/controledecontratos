@@ -3,33 +3,27 @@ databases:
     plan: free
 
 services:
+  # 1) API (Flask)
   - type: web
     name: sebrae-contratos-api
-    env: python
+    runtime: python
     plan: free
-    rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app
+    startCommand: gunicorn app:app
     envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: sebrae-contratos-db
           property: connectionString
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ENVIRONMENT
-        value: production
+      - key: CORS_ORIGINS
+        value: https://SEU-FRONTEND.onrender.com
 
+  # 2) Frontend (Static Site)
   - type: web
     name: sebrae-contratos-web
-    env: static
-    plan: free
-    rootDir: frontend
-    buildCommand: npm install && npm run build
+    runtime: static
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        fromService:
-          name: sebrae-contratos-api
-          type: web
-          property: host
+        value: https://SEU-BACKEND.onrender.com/api
