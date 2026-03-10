@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-from .db import init_db
+from .db import create_tables as init_db
 from .routes import api_bp
 from .scheduler import init_scheduler
 
