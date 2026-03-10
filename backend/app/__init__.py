@@ -28,6 +28,11 @@ def create_app():
     # Rotas
     app.register_blueprint(api_bp, url_prefix="/api")
 
+    # ✅ NOVO: rota raiz para indicar que a API está online
+    @app.get("/")
+    def home():
+        return jsonify({"service": "sebrae-contratos-api", "status": "online"})
+
     @app.get("/health")
     def health():
         return jsonify({"status": "ok"})
