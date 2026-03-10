@@ -1,19 +1,19 @@
+import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session, declarative_base
+from sqlalchemy.orm import sessionmaker
 
-Base = declarative_base()
-SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False))
-engine = None
+def get_database_url() -> str:
+    url = os.getenv("DATABASE_URL", "").strip()
+    if not url:
+        # fallback local (só dev)
+        return "sqlite:///./dev.db"
 
-def init_db(app):
-    global engine
-    db_url = app.config["DATABASE_URL"]
-    if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
-    elif db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    # Render às vezes fornece postgres://, SQLAlchemy prefere postgresql+psycopg2://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
 
-    engine = create_engine(db_url, pool_pre_ping=True)
-    SessionLocal.configure(bind=engine)
-    from . import models  # noqa: F401
-    Base.metadata.create_all(bind=engine)
+    return url
+
+DATABASE_URL = get_database_url()
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
