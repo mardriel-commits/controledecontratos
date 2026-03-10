@@ -4,11 +4,12 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from flask import Blueprint, request, jsonify, make_response, g
 
-from .auth_guard import create_access_token, auth_required
+from .auth_guard import create_access_token, decode_token, auth_required, JWT_SECRET
 from .db import SessionLocal
 from .models.user import User
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-jwt-secret")
+auth_bp = Blueprint("auth_bp", __name__)
+
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"  # true no Render (https)
 
@@ -46,6 +47,7 @@ def login():
             "user": {"id": user.id, "name": user.name, "email": user.email, "role": user.role}
         }))
 
+        # Cookie HttpOnly (seguro)
         resp.set_cookie(
             "refresh_token",
             refresh_token,
@@ -69,6 +71,7 @@ def refresh():
         payload = decode_token(rt)
         if payload.get("type") != "refresh":
             return jsonify({"error": "Invalid refresh token"}), 401
+
         user_id = int(payload["sub"])
         role = payload.get("role", "CONSULTA")
         access_token = create_access_token(user_id, role)
