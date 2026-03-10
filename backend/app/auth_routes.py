@@ -4,12 +4,11 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from flask import Blueprint, request, jsonify, make_response, g
 
-from .auth_guard import create_access_token, decode_token, auth_required, JWT_SECRET
+from .auth_guard import create_access_token, auth_required
 from .db import SessionLocal
 from .models.user import User
 
-auth_bp = Blueprint("auth_bp", __name__)
-
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-jwt-secret")
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"  # true no Render (https)
 
