@@ -153,3 +153,140 @@ def create_user():
         return jsonify({"id": u.id, "name": u.name, "email": u.email, "role": u.role, "active": u.active}), 201
     finally:
         db.close()
+        
+# =========================
+# MOVIMENTAÇÕES DE SALDO (PROTEGIDO)
+# =========================
+
+def _can_manage_contract(user_role: str, user_id: int, contract: Contract) -> bool:
+    """
+    ADMIN: pode tudo
+    GESTOR/FISCAL: somente se estiver vinculado ao contrato
+    """
+    if user_role == "ADMIN":
+        return True
+    if user_role in ("GESTOR", "FISCAL"):
+        # Ajuste aqui se seus campos tiverem outro nome:
+        return (getattr(contract, "gestor_id", None) == user_id) or (getattr(contract, "fiscal_id", None) == user_id)
+    return False
+
+
+@api_bp.get("/contracts/<int:contract_id>/movements")
+@auth_required
+def list_movements(contract_id: int):
+    from flask import g
+
+    db = SessionLocal()
+    try:
+        contract = db.execute(select(Contract).where(Contract.id == contract_id)).scalars().first()
+        if not contract:
+            return jsonify({"error": "Contrato não encontrado"}), 404
+
+        # leitura permitida para todos autenticados (inclusive CONSULTA)
+        rows = (
+            db.execute(
+                select(SaldoMovement)
+                .where(SaldoMovement.contract_id == contract_id)
+                .order_by(SaldoMovement.data_movimento.desc())
+            )
+            .scalars()
+            .all()
+        )
+
+        return jsonify([
+            {
+                "id": m.id,
+                "contract_id": m.contract_id,
+                "data_movimento": m.data_movimento.isoformat() if m.data_movimento else None,
+                "tipo": m.tipo,
+                "valor": float(m.valor),
+                "descricao": m.descricao,
+                "numero_nf": getattr(m, "numero_nf", None),
+                "created_at": m.created_at.isoformat() if getattr(m, "created_at", None) else None,
+                "created_by": getattr(m, "created_by", None),
+            }
+            for m in rows
+        ])
+    finally:
+        db.close()
+
+
+@api_bp.post("/contracts/<int:contract_id>/movements")
+@auth_required
+def create_movement(contract_id: int):
+    """
+    Cria movimentação:
+      - EXECUCAO: reduz saldo
+      - ESTORNO: aumenta saldo
+      - AJUSTE: aumenta ou reduz conforme valor (recomendação: usar valor positivo e tipo define sentido, mas aqui seguimos seu modelo atual)
+    Regras:
+      - ADMIN pode lançar em qualquer contrato
+      - GESTOR/FISCAL apenas nos contratos em que são responsáveis
+      - CONSULTA não pode lançar
+    """
+    from flask import g
+
+    db = SessionLocal()
+    try:
+        contract = db.execute(select(Contract).where(Contract.id == contract_id)).scalars().first()
+        if not contract:
+            return jsonify({"error": "Contrato não encontrado"}), 404
+
+        # Permissão de escrita
+        if g.user_role == "CONSULTA":
+            return jsonify({"error": "Forbidden"}), 403
+
+        if not _can_manage_contract(g.user_role, g.user_id, contract):
+            return jsonify({"error": "Forbidden"}), 403
+
+        data = request.get_json(force=True) or {}
+
+        tipo = (data.get("tipo") or "").strip().upper()
+        if tipo not in ("EXECUCAO", "ESTORNO", "AJUSTE"):
+            return jsonify({"error": "tipo inválido (EXECUCAO, ESTORNO, AJUSTE)"}), 400
+
+        valor = _dec(data.get("valor"))
+        if valor <= 0:
+            return jsonify({"error": "valor deve ser > 0"}), 400
+
+        data_mov = data.get("data_movimento")
+        try:
+            data_movimento = dt.date.fromisoformat(data_mov) if data_mov else dt.date.today()
+        except Exception:
+            return jsonify({"error": "data_movimento inválida (use YYYY-MM-DD)"}), 400
+
+        descricao = (data.get("descricao") or "").strip()
+        numero_nf = (data.get("numero_nf") or "").strip() if data.get("numero_nf") is not None else None
+
+        # Cria registro
+        m = SaldoMovement(
+            contract_id=contract_id,
+            data_movimento=data_movimento,
+            tipo=tipo,
+            valor=valor,
+            descricao=descricao,
+        )
+
+        # Se existir coluna numero_nf / created_by no seu model, preenche
+        if hasattr(m, "numero_nf"):
+            setattr(m, "numero_nf", numero_nf)
+        if hasattr(m, "created_by"):
+            setattr(m, "created_by", g.user_id)
+
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+
+        # Retorno
+        return jsonify({
+            "id": m.id,
+            "contract_id": m.contract_id,
+            "data_movimento": m.data_movimento.isoformat() if m.data_movimento else None,
+            "tipo": m.tipo,
+            "valor": float(m.valor),
+            "descricao": m.descricao,
+            "numero_nf": getattr(m, "numero_nf", None),
+        }), 201
+
+    finally:
+        db.close()
