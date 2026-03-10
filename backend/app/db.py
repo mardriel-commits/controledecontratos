@@ -17,3 +17,18 @@ def get_database_url() -> str:
 DATABASE_URL = get_database_url()
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def init_db():
+    """
+    Cria as tabelas no banco com base nos models (SQLAlchemy Base).
+    """
+    # Ajuste este import conforme o local onde seu Base está definido
+    from .models import Base
+    Base.metadata.create_all(bind=engine)
+
+def get_session():
+    """
+    Helper opcional: cria uma sessão nova.
+    Use: db = get_session()
+    """
+    return SessionLocal()
