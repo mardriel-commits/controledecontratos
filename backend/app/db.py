@@ -1,6 +1,9 @@
 import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+# Base único do SQLAlchemy (os models herdam dele)
+Base = declarative_base()
 
 def get_database_url() -> str:
     url = os.getenv("DATABASE_URL", "").strip()
@@ -20,15 +23,14 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
     """
-    Cria as tabelas no banco com base nos models (SQLAlchemy Base).
+    Importa models para registrar as tabelas e cria no banco.
     """
-    # Ajuste este import conforme o local onde seu Base está definido
-    from .models import Base
+    # Importa o pacote models para registrar todas as classes no Base.metadata
+    from . import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
 
 def get_session():
-    """
-    Helper opcional: cria uma sessão nova.
-    Use: db = get_session()
-    """
     return SessionLocal()
+
+# Alias opcional (caso alguma parte do código use esse nome)
+create_tables = init_db
