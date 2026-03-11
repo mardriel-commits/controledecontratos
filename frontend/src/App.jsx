@@ -8,17 +8,56 @@ function semDot(semaforo){
   return 'green'
 }
 
+function getToken(){
+  return localStorage.getItem('access_token') || ''
+}
+function setToken(t){
+  if(t) localStorage.setItem('access_token', t)
+  else localStorage.removeItem('access_token')
+}
+
 export default function App(){
   const [contracts,setContracts]=useState([])
   const [q,setQ]=useState('')
   const [loading,setLoading]=useState(false)
 
+  async function login(){
+    const email = prompt('E-mail:')
+    if(!email) return
+    const password = prompt('Senha:')
+    if(!password) return
+
+    const r = await fetch(`${API}/auth/login`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body: JSON.stringify({ email, password })
+    })
+    const j = await r.json().catch(()=> ({}))
+    if(!r.ok){
+      alert(j?.error || 'Falha no login')
+      return
+    }
+    setToken(j.access_token)
+    alert('Login OK! Agora clique em Atualizar.')
+  }
+
   async function load(){
     setLoading(true)
     try{
-      const r=await fetch(`${API}/contracts`)
+      const token = getToken()
+      const r = await fetch(`${API}/contracts`,{
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+
+      if(r.status === 401){
+        alert('Acesso negado (401). Clique em Entrar.')
+        setContracts([])
+        return
+      }
+
       const j=await r.json()
-      setContracts(j)
+      setContracts(Array.isArray(j) ? j : [])
     } finally { setLoading(false) }
   }
 
@@ -53,7 +92,11 @@ export default function App(){
             <div className="small">Cores Sebrae • Semáforo: verde OK, amarelo ≤30, vermelho ≤15</div>
           </div>
         </div>
-        <button className="btn" onClick={load} disabled={loading}>{loading?'Atualizando...':'Atualizar'}</button>
+
+        <div style={{display:'flex', gap:10}}>
+          <button className="btn" onClick={login}>Entrar</button>
+          <button className="btn" onClick={load} disabled={loading}>{loading?'Atualizando...':'Atualizar'}</button>
+        </div>
       </div>
 
       <div className="grid">
@@ -107,6 +150,9 @@ export default function App(){
                   <td>R$ {Number(c.saldo_atual||0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan="7" className="small" style={{padding:16, opacity:0.8}}>Nenhum registro.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
