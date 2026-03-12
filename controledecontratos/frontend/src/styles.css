@@ -1,0 +1,37 @@
+:root{
+  --sebrae-blue:#2A4FDA;
+  --bg:#0b1020;
+  --card:#111a33;
+  --text:#e9ecff;
+  --muted:#b8c0ff;
+  --green:#1db954;
+  --yellow:#f5c542;
+  --red:#ff4d4f;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:linear-gradient(180deg,var(--bg),#050815);color:var(--text)}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.brand{display:flex;gap:12px;align-items:center}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--sebrae-blue)}
+.h1{font-size:20px;font-weight:800}
+.small{font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:900px){.grid{grid-template-columns:380px 1fr}}
+.card{background:rgba(17,26,51,.85);border:1px solid rgba(42,79,218,.25);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.kpi{padding:12px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)}
+.kpi .v{font-size:22px;font-weight:900;margin-top:6px}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px;border:1px solid rgba(255,255,255,.12)}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot.green{background:var(--green)}
+.dot.yellow{background:var(--yellow)}
+.dot.red{background:var(--red)}
+.table{width:100%;border-collapse:separate;border-spacing:0 10px}
+.table th{color:var(--muted);text-align:left;font-size:12px;font-weight:800;padding:10px}
+.table td{padding:12px;font-size:13px}
+.row{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)}
+.row td:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
+.row td:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
+.btn{background:var(--sebrae-blue);border:none;color:white;padding:10px 12px;border-radius:12px;font-weight:900;cursor:pointer}
+.input{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:var(--text);padding:10px 12px;border-radius:12px;width:100%}
