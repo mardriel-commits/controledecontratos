@@ -74,8 +74,6 @@ export function useApi() {
     } catch (error) {
       console.warn('Erro ao chamar logout no backend:', error)
     } finally {
-      setToken('')
-      setUser(null)
       authLogout()
     }
   }
