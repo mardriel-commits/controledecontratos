@@ -22,8 +22,6 @@ export function useApi() {
     const data = await res.json().catch(() => null)
 
     if (res.status === 401) {
-      setToken('')
-      setUser(null)
       authLogout()
       throw new Error(data?.error || 'Não autenticado')
     }
