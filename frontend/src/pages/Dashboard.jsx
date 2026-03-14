@@ -70,7 +70,6 @@ export default function Dashboard(){
           {isAdmin && <Link className="btn" to="/audit">Auditoria</Link>}
           {isAdmin && <Link className="btn" to="/alerts">Alertas</Link>}
 
-          <Link className="btn" to="/contracts/new">Novo Contrato</Link>
           <button className="btn" onClick={api.logout} style={{background:'#fff', color:'var(--primary)', border:'1px solid var(--primary)'}}>Sair</button>
           <button className="btn" onClick={load} disabled={loading}>{loading?'Atualizando...':'Atualizar'}</button>
         </div>
