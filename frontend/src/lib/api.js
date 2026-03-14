@@ -23,6 +23,7 @@ export function useApi() {
 
     if (res.status === 401) {
       setToken('')
+      setUser(null)
       authLogout()
       throw new Error(data?.error || 'Não autenticado')
     }
@@ -46,21 +47,23 @@ export function useApi() {
     }
 
     try {
-      const me = await fetch(`${API}/auth/me`, {
+      const meRes = await fetch(`${API}/auth/me`, {
+        method: 'GET',
         headers: {
           Authorization: `Bearer ${data.access_token}`,
         },
         credentials: 'include',
       })
 
-      const meData = await me.json().catch(() => null)
+      const meData = await meRes.json().catch(() => null)
 
-      if (me.ok) {
+      if (meRes.ok) {
         setUser(meData)
       } else {
         setUser(null)
       }
-    } catch {
+    } catch (error) {
+      console.error('Erro ao buscar /auth/me após login:', error)
       setUser(null)
     }
 
@@ -70,8 +73,8 @@ export function useApi() {
   async function logout() {
     try {
       await request('/auth/logout', { method: 'POST' })
-    } catch {
-      // ignora erro no logout do backend
+    } catch (error) {
+      console.warn('Erro ao chamar logout no backend:', error)
     } finally {
       setToken('')
       setUser(null)
@@ -123,5 +126,4 @@ export function useApi() {
     getAudit: (params = '') => request(`/audit${params}`),
     getAlerts: () => request('/alerts'),
   }
-}
 }
