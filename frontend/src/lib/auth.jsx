@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import api from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -9,11 +8,11 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   function setToken(t) {
-    const v = t || ''
-    setTokenState(v)
+    const value = t || ''
+    setTokenState(value)
 
-    if (v) {
-      localStorage.setItem('access_token', v)
+    if (value) {
+      localStorage.setItem('access_token', value)
     } else {
       localStorage.removeItem('access_token')
     }
@@ -24,29 +23,40 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
-  async function fetchMe(currentToken) {
-    try {
-      const response = await api.get('/auth/me', {
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-        },
-      })
-
-      setUser(response.data)
-    } catch (error) {
-      console.error('Erro ao buscar usuário logado:', error)
-      logout()
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    if (token) {
-      fetchMe(token)
-    } else {
-      setLoading(false)
+    async function restoreSession() {
+      if (!token) {
+        setLoading(false)
+        return
+      }
+
+      try {
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+        const res = await fetch(`${API_BASE}/api/auth/me`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: 'include',
+        })
+
+        const data = await res.json().catch(() => null)
+
+        if (!res.ok) {
+          logout()
+          return
+        }
+
+        setUser(data)
+      } catch (error) {
+        console.error('Erro ao restaurar sessão:', error)
+        logout()
+      } finally {
+        setLoading(false)
+      }
     }
+
+    restoreSession()
   }, [token])
 
   const value = useMemo(
@@ -67,6 +77,8 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider')
+  }
   return ctx
 }
