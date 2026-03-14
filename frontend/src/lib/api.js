@@ -4,7 +4,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 const API = `${API_BASE}/api`
 
 export function useApi() {
-  const { token, setToken, user, setUser, logout: authLogout } = useAuth()
+  const { token, user, setUser, setToken, logout: authLogout } = useAuth()
 
   async function request(path, options = {}) {
     const headers = { ...(options.headers || {}) }
@@ -87,6 +87,21 @@ export function useApi() {
 
     getContracts: () => request('/contracts'),
     getContract: (id) => request(`/contracts/${id}`),
+
+    createContract: (payload) =>
+      request('/contracts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+
+    updateContract: (id, payload) =>
+      request(`/contracts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+
     getMovements: (id) => request(`/contracts/${id}/movements`),
 
     createMovement: (id, payload) =>
@@ -101,13 +116,6 @@ export function useApi() {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
-      }),
-
-    createContract: (payload) =>
-      request('/contracts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
       }),
 
     getUsers: () => request('/users'),
