@@ -117,7 +117,14 @@ export function useApi() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
       }),
-
+    
+    createUser: (payload) =>
+      request('/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+    
     getUsers: () => request('/users'),
 
     updateUser: (id, payload) =>
