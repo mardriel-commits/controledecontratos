@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import ConfirmModal from '../components/ConfirmModal'
+import FeedbackMessage from '../components/FeedbackMessage'
+import PageLoader from '../components/PageLoader'
+import EmptyState from '../components/EmptyState'
 
 function semDot(semaforo) {
   if (semaforo === 'VERMELHO') return 'red'
@@ -25,6 +29,10 @@ export default function ContractDetail() {
   const [savingContract, setSavingContract] = useState(false)
   const [msg, setMsg] = useState('')
   const [msgType, setMsgType] = useState('info')
+
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const [form, setForm] = useState({
     tipo: 'EXECUCAO',
@@ -161,19 +169,34 @@ export default function ContractDetail() {
     }
   }
 
-  async function handleDeleteMovement(m) {
+  function handleDeleteMovement(m) {
     if (!isAdmin) return
-    const reason = prompt('Informe o motivo da exclusão:')
-    if (!reason) return
+    setDeleteTarget(m)
+    setDeleteReason('')
+  }
 
+  async function confirmDeleteMovement() {
+    if (!deleteTarget) return
+
+    if (!deleteReason.trim()) {
+      setMsgType('error')
+      setMsg('Informe o motivo da exclusão.')
+      return
+    }
+
+    setDeleting(true)
     try {
-      await api.deleteMovement(m.id, reason)
+      await api.deleteMovement(deleteTarget.id, deleteReason.trim())
       setMsgType('success')
       setMsg('Movimentação excluída com sucesso.')
+      setDeleteTarget(null)
+      setDeleteReason('')
       await load()
     } catch (e) {
       setMsgType('error')
       setMsg(e.message || 'Não foi possível excluir a movimentação.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -207,6 +230,28 @@ export default function ContractDetail() {
     }
   }
 
+  if (!contract && loading) {
+    return (
+      <div className="container">
+        <div className="topbar">
+          <div className="brand">
+            <div className="logo" />
+            <div>
+              <div className="h1">Detalhes do contrato</div>
+              <div className="small">Consulta das informações contratuais</div>
+            </div>
+          </div>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
+        </div>
+
+        <PageLoader
+          title="Carregando informações do contrato"
+          subtitle="Os dados estão sendo preparados para visualização."
+        />
+      </div>
+    )
+  }
+
   if (!contract) {
     return (
       <div className="container">
@@ -215,17 +260,15 @@ export default function ContractDetail() {
             <div className="logo" />
             <div>
               <div className="h1">Detalhes do contrato</div>
-              <div className="small">Carregando informações...</div>
+              <div className="small">Informações indisponíveis</div>
             </div>
           </div>
           <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
 
-        {msg && (
-          <div className={`notice ${msgType === 'error' ? 'notice-error' : 'notice-info'}`}>
-            {msg}
-          </div>
-        )}
+        <FeedbackMessage type={msgType}>
+          {msg || 'Não foi possível localizar o contrato solicitado.'}
+        </FeedbackMessage>
       </div>
     )
   }
@@ -255,11 +298,9 @@ export default function ContractDetail() {
         </div>
       </div>
 
-      {msg && (
-        <div className={`notice ${msgType === 'success' ? 'notice-success' : msgType === 'error' ? 'notice-error' : 'notice-info'}`} style={{ marginBottom: 16 }}>
-          {msg}
-        </div>
-      )}
+      <FeedbackMessage type={msgType} style={{ marginBottom: 16 }}>
+        {msg}
+      </FeedbackMessage>
 
       <div className="grid">
         <div>
@@ -454,9 +495,10 @@ export default function ContractDetail() {
                   {movs.length === 0 && (
                     <tr>
                       <td colSpan={isAdmin ? 6 : 5}>
-                        <div className="empty-state">
-                          Ainda não há movimentações registradas para este contrato.
-                        </div>
+                        <EmptyState
+                          title="Nenhuma movimentação registrada"
+                          description="Este contrato ainda não possui lançamentos financeiros vinculados."
+                        />
                       </td>
                     </tr>
                   )}
@@ -632,6 +674,33 @@ export default function ContractDetail() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Excluir movimentação"
+        description="A exclusão será registrada no histórico do sistema. Informe o motivo para continuar."
+        confirmText="Confirmar exclusão"
+        cancelText="Cancelar"
+        danger
+        loading={deleting}
+        onClose={() => {
+          if (deleting) return
+          setDeleteTarget(null)
+          setDeleteReason('')
+        }}
+        onConfirm={confirmDeleteMovement}
+      >
+        <div>
+          <div className="label">Motivo da exclusão</div>
+          <textarea
+            className="input"
+            rows="4"
+            value={deleteReason}
+            onChange={e => setDeleteReason(e.target.value)}
+            placeholder="Descreva o motivo da exclusão"
+          />
+        </div>
+      </ConfirmModal>
     </div>
   )
 }
