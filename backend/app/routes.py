@@ -497,6 +497,10 @@ def list_movements(contract_id: int):
                 "descricao": m.descricao,
                 "created_by": m.created_by,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
+                "is_deleted": m.is_deleted,
+                "deleted_at": m.deleted_at.isoformat() if m.deleted_at else None,
+                "deleted_by": m.deleted_by,
+                "delete_reason": m.delete_reason,
             }
             for m in rows
         ])
@@ -631,7 +635,13 @@ def list_audit():
         q_from = request.args.get("from")
         q_to = request.args.get("to")
 
-        stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(500)
+        q_limit = request.args.get("limit", "200")
+        try:
+            limit = min(max(int(q_limit), 1), 1000)
+        except Exception:
+            limit = 200
+
+        stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)
         if q_entity:
             stmt = stmt.where(AuditLog.entity == q_entity)
         if q_action:
