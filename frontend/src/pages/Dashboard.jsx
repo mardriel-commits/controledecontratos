@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useApi } from '../lib/api'
+import FeedbackMessage from '../components/FeedbackMessage'
+import PageLoader from '../components/PageLoader'
+import EmptyState from '../components/EmptyState'
 
 function semDot(semaforo) {
   if (semaforo === 'VERMELHO') return 'red'
@@ -77,20 +80,41 @@ export default function Dashboard() {
     }
   }, [contracts])
 
+  if (loading && contracts.length === 0) {
+    return (
+      <div className="container">
+        <div className="topbar">
+          <div className="brand">
+            <div className="logo" />
+            <div>
+              <div className="h1">Painel de Contratos</div>
+              <div className="small">Ambiente administrativo</div>
+            </div>
+          </div>
+        </div>
+
+        <PageLoader
+          title="Carregando contratos"
+          subtitle="Os dados estão sendo preparados para consulta."
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="container">
       <div className="topbar">
         <div className="brand">
           <div className="logo" />
-          <div>
+          <div className="page-header-block">
             <div className="h1">Painel de Contratos</div>
             <div className="small">
               Ambiente administrativo • Perfil: <strong>{getRoleLabel(user?.role)}</strong>
               {user?.name ? ` • ${user.name}` : ''}
             </div>
             <div className="page-subnav">
-              <span className="badge badge-soft">Consulta centralizada dos contratos</span>
-              <span className="badge">Atualização em tempo real</span>
+              <span className="badge badge-soft">Consulta centralizada</span>
+              <span className="badge">Acompanhamento contratual</span>
             </div>
           </div>
         </div>
@@ -111,8 +135,12 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <FeedbackMessage type="error" style={{ marginBottom: 16 }}>
+        {error}
+      </FeedbackMessage>
+
       <div className="grid">
-        <div>
+        <div className="stack">
           <div className="card card-muted">
             <div className="card-header">
               <div className="h2">Resumo executivo</div>
@@ -142,50 +170,49 @@ export default function Dashboard() {
               {isAdmin && 'Você possui acesso completo para consulta, cadastro, edição e administração do sistema.'}
               {isGestor && 'Seu perfil permite consulta ampla e lançamento de movimentações nos contratos vinculados.'}
               {isFiscal && 'Seu perfil permite consulta ampla e lançamento de movimentações nos contratos vinculados.'}
-              {isConsulta && 'Seu perfil permite consulta dos contratos, sem ações de alteração.'}
+              {isConsulta && 'Seu perfil permite apenas a consulta das informações contratuais.'}
             </div>
           </div>
 
           <div className="card">
             <div className="h2" style={{ marginBottom: 12 }}>Consulta de contratos</div>
-
-            <div className="form-grid">
-              <div className="form-full">
-                <div className="label">Pesquisar por número, empresa ou CNPJ</div>
-                <input
-                  className="input"
-                  value={q}
-                  onChange={e => setQ(e.target.value)}
-                  placeholder="Ex.: CT-001, Empresa X, 12.345.678/0001-90"
-                />
-              </div>
-
-              <div>
-                <div className="label">Status</div>
-                <select className="input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                  <option value="">Todos</option>
-                  <option value="ATIVO">Ativo</option>
-                  <option value="SUSPENSO">Suspenso</option>
-                  <option value="ENCERRADO">Encerrado</option>
-                </select>
-              </div>
-
-              <div>
-                <div className="label">Situação</div>
-                <select className="input" value={riskFilter} onChange={e => setRiskFilter(e.target.value)}>
-                  <option value="">Todas</option>
-                  <option value="VERDE">Regular</option>
-                  <option value="AMARELO">Atenção</option>
-                  <option value="VERMELHO">Crítico</option>
-                </select>
-              </div>
+            <div className="small" style={{ marginBottom: 14 }}>
+              Utilize os filtros abaixo para localizar contratos por número, empresa, CNPJ, status ou situação.
             </div>
 
-            {error && (
-              <div className="notice notice-error" style={{ marginTop: 14 }}>
-                {error}
+            <div className="panel">
+              <div className="form-grid">
+                <div className="form-full">
+                  <div className="label">Pesquisar por número, empresa ou CNPJ</div>
+                  <input
+                    className="input"
+                    value={q}
+                    onChange={e => setQ(e.target.value)}
+                    placeholder="Ex.: CT-001, Empresa X, 12.345.678/0001-90"
+                  />
+                </div>
+
+                <div>
+                  <div className="label">Status</div>
+                  <select className="input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                    <option value="">Todos</option>
+                    <option value="ATIVO">Ativo</option>
+                    <option value="SUSPENSO">Suspenso</option>
+                    <option value="ENCERRADO">Encerrado</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="label">Situação</div>
+                  <select className="input" value={riskFilter} onChange={e => setRiskFilter(e.target.value)}>
+                    <option value="">Todas</option>
+                    <option value="VERDE">Regular</option>
+                    <option value="AMARELO">Atenção</option>
+                    <option value="VERMELHO">Crítico</option>
+                  </select>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -193,7 +220,7 @@ export default function Dashboard() {
           <div className="card-header">
             <div>
               <div className="h2">Relação de contratos</div>
-              <div className="small">Consulta consolidada dos contratos cadastrados</div>
+              <div className="small">Consulta consolidada dos contratos cadastrados no sistema</div>
             </div>
             <div className="badge">{filtered.length} registro(s)</div>
           </div>
@@ -259,9 +286,10 @@ export default function Dashboard() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan="6">
-                      <div className="empty-state">
-                        Nenhum contrato encontrado para os filtros informados.
-                      </div>
+                      <EmptyState
+                        title="Nenhum contrato encontrado"
+                        description="Revise os filtros informados ou recarregue os dados para uma nova consulta."
+                      />
                     </td>
                   </tr>
                 )}
