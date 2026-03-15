@@ -23,7 +23,7 @@ function buildSummary(row) {
   const c = row?.changes || {}
 
   if (row.entity === 'movement' && row.action === 'CREATE') {
-    return `Movimentação criada • Contrato #${c.contract_id ?? '—'} • ${c.tipo ?? '—'} • R$ ${money(c.valor)}`
+    return `Movimentação registrada • Contrato #${c.contract_id ?? '—'} • ${c.tipo ?? '—'} • R$ ${money(c.valor)}`
   }
 
   if (row.entity === 'movement' && row.action === 'DELETE') {
@@ -31,41 +31,26 @@ function buildSummary(row) {
   }
 
   if (row.entity === 'contract' && row.action === 'CREATE') {
-    return `Contrato criado • Nº ${c.numero_contrato || '—'} • CNPJ ${c.cnpj || '—'}`
+    return `Contrato cadastrado • Nº ${c.numero_contrato || '—'}`
   }
 
   if (row.entity === 'contract' && row.action === 'UPDATE') {
     const before = c.before || {}
     const after = c.after || {}
-
     const changedFields = Object.keys(after).filter(
       key => JSON.stringify(before[key]) !== JSON.stringify(after[key])
     )
-
-    if (changedFields.length > 0) {
-      return `Contrato atualizado • Campos alterados: ${changedFields.join(', ')}`
-    }
-
-    return 'Contrato atualizado'
+    return changedFields.length
+      ? `Contrato atualizado • Campos alterados: ${changedFields.join(', ')}`
+      : 'Contrato atualizado'
   }
 
   if (row.entity === 'user' && row.action === 'CREATE') {
-    return `Usuário criado • ${c.email || '—'} • Perfil ${c.role || '—'}`
+    return `Usuário cadastrado • ${c.email || '—'} • Perfil ${c.role || '—'}`
   }
 
   if (row.entity === 'user' && row.action === 'UPDATE') {
-    const before = c.before || {}
-    const after = c.after || {}
-
-    const changedFields = Object.keys(after).filter(
-      key => JSON.stringify(before[key]) !== JSON.stringify(after[key])
-    )
-
-    if (changedFields.length > 0) {
-      return `Usuário atualizado • Campos alterados: ${changedFields.join(', ')}`
-    }
-
-    return 'Usuário atualizado'
+    return 'Cadastro de usuário atualizado'
   }
 
   return row.changes ? JSON.stringify(row.changes) : '—'
@@ -112,7 +97,7 @@ export default function Audit() {
       const j = await api.getAudit(qs.toString() ? `?${qs.toString()}` : '')
       setRows(Array.isArray(j) ? j : [])
     } catch (e) {
-      setMsg(e.message || 'Erro ao carregar auditoria')
+      setMsg(e.message || 'Não foi possível carregar o histórico de atividades.')
       setRows([])
     } finally {
       setLoading(false)
@@ -143,15 +128,15 @@ export default function Audit() {
           <div className="brand">
             <div className="logo" />
             <div>
-              <div className="h1">Auditoria</div>
+              <div className="h1">Histórico de atividades</div>
               <div className="small">Acesso restrito</div>
             </div>
           </div>
-          <Link className="btn" to="/">Voltar</Link>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
 
-        <div className="card">
-          <div style={{ fontWeight: 900 }}>Somente ADMIN.</div>
+        <div className="notice notice-info">
+          Esta área está disponível somente para perfis administrativos.
         </div>
       </div>
     )
@@ -163,180 +148,138 @@ export default function Audit() {
         <div className="brand">
           <div className="logo" />
           <div>
-            <div className="h1">Auditoria</div>
-            <div className="small">Log de ações do sistema</div>
+            <div className="h1">Histórico de atividades</div>
+            <div className="small">Registro consolidado das ações realizadas no sistema</div>
           </div>
         </div>
-        <Link className="btn" to="/">Voltar</Link>
+        <Link className="btn btn-secondary" to="/">Voltar</Link>
       </div>
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr 160px 160px 120px auto auto',
-            gap: 10,
-            alignItems: 'end',
-          }}
-        >
+      <div className="card">
+        <div className="h2" style={{ marginBottom: 12 }}>Filtros de consulta</div>
+
+        <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr 160px 160px 120px' }}>
           <div>
-            <div className="small">Entidade</div>
-            <select
-              className="input"
-              value={filters.entity}
-              onChange={e => setFilter('entity', e.target.value)}
-            >
-              <option value="">(todas)</option>
-              <option value="contract">contract</option>
-              <option value="movement">movement</option>
-              <option value="user">user</option>
+            <div className="label">Entidade</div>
+            <select className="input" value={filters.entity} onChange={e => setFilter('entity', e.target.value)}>
+              <option value="">Todas</option>
+              <option value="contract">Contrato</option>
+              <option value="movement">Movimentação</option>
+              <option value="user">Usuário</option>
             </select>
           </div>
 
           <div>
-            <div className="small">Ação</div>
-            <select
-              className="input"
-              value={filters.action}
-              onChange={e => setFilter('action', e.target.value)}
-            >
-              <option value="">(todas)</option>
-              <option value="CREATE">CREATE</option>
-              <option value="UPDATE">UPDATE</option>
-              <option value="DELETE">DELETE</option>
+            <div className="label">Ação</div>
+            <select className="input" value={filters.action} onChange={e => setFilter('action', e.target.value)}>
+              <option value="">Todas</option>
+              <option value="CREATE">Cadastro</option>
+              <option value="UPDATE">Atualização</option>
+              <option value="DELETE">Exclusão</option>
             </select>
           </div>
 
           <div>
-            <div className="small">Usuário (ID)</div>
-            <input
-              className="input"
-              value={filters.user_id}
-              onChange={e => setFilter('user_id', e.target.value)}
-              placeholder="Ex.: 1"
-            />
+            <div className="label">Usuário (ID)</div>
+            <input className="input" value={filters.user_id} onChange={e => setFilter('user_id', e.target.value)} />
           </div>
 
           <div>
-            <div className="small">De</div>
-            <input
-              className="input"
-              type="date"
-              value={filters.from}
-              onChange={e => setFilter('from', e.target.value)}
-            />
+            <div className="label">Data inicial</div>
+            <input className="input" type="date" value={filters.from} onChange={e => setFilter('from', e.target.value)} />
           </div>
 
           <div>
-            <div className="small">Até</div>
-            <input
-              className="input"
-              type="date"
-              value={filters.to}
-              onChange={e => setFilter('to', e.target.value)}
-            />
+            <div className="label">Data final</div>
+            <input className="input" type="date" value={filters.to} onChange={e => setFilter('to', e.target.value)} />
           </div>
 
           <div>
-            <div className="small">Limite</div>
-            <select
-              className="input"
-              value={filters.limit}
-              onChange={e => setFilter('limit', e.target.value)}
-            >
+            <div className="label">Limite</div>
+            <select className="input" value={filters.limit} onChange={e => setFilter('limit', e.target.value)}>
               <option value="50">50</option>
               <option value="100">100</option>
               <option value="200">200</option>
               <option value="500">500</option>
             </select>
           </div>
-
-          <button className="btn" onClick={load} disabled={loading}>
-            {loading ? 'Filtrando...' : 'Filtrar'}
-          </button>
-
-          <button className="btn" type="button" onClick={clearFilters}>
-            Limpar
-          </button>
         </div>
 
-        <div className="small" style={{ marginTop: 12 }}>
-          Registros encontrados: <strong>{totalRows}</strong>
+        <div className="actions" style={{ marginTop: 14 }}>
+          <button className="btn" onClick={load} disabled={loading}>
+            {loading ? 'Consultando...' : 'Aplicar filtros'}
+          </button>
+          <button className="btn btn-secondary" type="button" onClick={clearFilters}>
+            Limpar filtros
+          </button>
+          <span className="badge">{totalRows} registro(s)</span>
         </div>
 
         {msg && (
-          <div className="small" style={{ fontWeight: 900, marginTop: 10 }}>
+          <div className="notice notice-error" style={{ marginTop: 14 }}>
             {msg}
           </div>
         )}
 
-        <table className="table" style={{ marginTop: 12 }}>
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Usuário</th>
-              <th>Ação</th>
-              <th>Entidade</th>
-              <th>ID</th>
-              <th>Resumo</th>
-              <th>IP</th>
-              <th>Detalhes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <React.Fragment key={r.id}>
-                <tr className="row">
-                  <td>{formatDateTime(r.created_at)}</td>
-                  <td>{r.user_id ?? '—'}</td>
-                  <td style={{ fontWeight: 900 }}>{r.action}</td>
-                  <td>{r.entity}</td>
-                  <td>{r.entity_id ?? '—'}</td>
-                  <td className="small">{buildSummary(r)}</td>
-                  <td className="small">{r.ip || '—'}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setOpenId(prev => (prev === r.id ? null : r.id))}
-                    >
-                      {openId === r.id ? 'Ocultar' : 'Ver'}
-                    </button>
-                  </td>
-                </tr>
-
-                {openId === r.id && (
-                  <tr>
-                    <td colSpan="8" style={{ padding: 12, background: '#fafafa' }}>
-                      <div className="small" style={{ fontWeight: 900, marginBottom: 8 }}>
-                        Detalhes completos
-                      </div>
-                      <pre
-                        style={{
-                          margin: 0,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                          fontSize: 12,
-                          lineHeight: 1.5,
-                        }}
+        <div className="table-wrap" style={{ marginTop: 16 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Data e hora</th>
+                <th>Usuário</th>
+                <th>Ação</th>
+                <th>Entidade</th>
+                <th>Identificador</th>
+                <th>Resumo</th>
+                <th>Detalhes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <React.Fragment key={r.id}>
+                  <tr className="row">
+                    <td>{formatDateTime(r.created_at)}</td>
+                    <td>{r.user_id ?? '—'}</td>
+                    <td style={{ fontWeight: 900 }}>{r.action}</td>
+                    <td>{r.entity}</td>
+                    <td>{r.entity_id ?? '—'}</td>
+                    <td className="small">{buildSummary(r)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setOpenId(prev => (prev === r.id ? null : r.id))}
                       >
-                        {JSON.stringify(r.changes || {}, null, 2)}
-                      </pre>
+                        {openId === r.id ? 'Ocultar' : 'Visualizar'}
+                      </button>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
 
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan="8" className="small" style={{ padding: 16 }}>
-                  Sem registros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  {openId === r.id && (
+                    <tr>
+                      <td colSpan="7" style={{ padding: 12, background: '#FAFBFE' }}>
+                        <div className="section-title">Detalhamento do registro</div>
+                        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12 }}>
+{JSON.stringify(r.changes || {}, null, 2)}
+                        </pre>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan="7">
+                    <div className="empty-state">
+                      Nenhum registro encontrado para os filtros selecionados.
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
