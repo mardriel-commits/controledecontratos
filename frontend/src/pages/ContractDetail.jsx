@@ -24,6 +24,7 @@ export default function ContractDetail() {
   const [loading, setLoading] = useState(false)
   const [savingContract, setSavingContract] = useState(false)
   const [msg, setMsg] = useState('')
+  const [msgType, setMsgType] = useState('info')
 
   const [form, setForm] = useState({
     tipo: 'EXECUCAO',
@@ -75,7 +76,8 @@ export default function ContractDetail() {
         observacoes: c.observacoes || '',
       })
     } catch (e) {
-      setMsg(e.message || 'Erro ao carregar')
+      setMsgType('error')
+      setMsg(e.message || 'Não foi possível carregar as informações do contrato.')
     } finally {
       setLoading(false)
     }
@@ -114,14 +116,8 @@ export default function ContractDetail() {
     if (!editForm.numero_contrato.trim()) return 'Informe o número do contrato.'
     if (!editForm.data_inicio) return 'Informe a data de início.'
     if (!editForm.data_fim) return 'Informe a data de fim.'
-
-    const valor = Number(editForm.valor_inicial || 0)
-    if (valor <= 0) return 'Informe um valor inicial válido.'
-
-    if (editForm.data_fim < editForm.data_inicio) {
-      return 'A data fim não pode ser anterior à data de início.'
-    }
-
+    if (Number(editForm.valor_inicial || 0) <= 0) return 'Informe um valor inicial válido.'
+    if (editForm.data_fim < editForm.data_inicio) return 'A data final não pode ser anterior à data inicial.'
     return ''
   }
 
@@ -131,6 +127,7 @@ export default function ContractDetail() {
 
     const validationError = validateContractForm()
     if (validationError) {
+      setMsgType('error')
       setMsg(validationError)
       return
     }
@@ -153,10 +150,12 @@ export default function ContractDetail() {
       }
 
       await api.updateContract(id, payload)
-      setMsg('✅ Contrato atualizado com sucesso.')
+      setMsgType('success')
+      setMsg('Contrato atualizado com sucesso.')
       await load()
     } catch (e) {
-      setMsg(e.message || 'Erro ao atualizar contrato')
+      setMsgType('error')
+      setMsg(e.message || 'Não foi possível atualizar o contrato.')
     } finally {
       setSavingContract(false)
     }
@@ -164,20 +163,24 @@ export default function ContractDetail() {
 
   async function handleDeleteMovement(m) {
     if (!isAdmin) return
-    const reason = prompt('Motivo da exclusão (obrigatório):')
+    const reason = prompt('Informe o motivo da exclusão:')
     if (!reason) return
 
     try {
       await api.deleteMovement(m.id, reason)
+      setMsgType('success')
+      setMsg('Movimentação excluída com sucesso.')
       await load()
     } catch (e) {
-      setMsg(e.message || 'Erro ao excluir')
+      setMsgType('error')
+      setMsg(e.message || 'Não foi possível excluir a movimentação.')
     }
   }
 
   async function submitMovement(e) {
     e.preventDefault()
     setMsg('')
+
     try {
       const payload = {
         tipo: form.tipo,
@@ -195,9 +198,12 @@ export default function ContractDetail() {
         numero_nf: '',
         descricao: '',
       })
+      setMsgType('success')
+      setMsg('Movimentação registrada com sucesso.')
       await load()
     } catch (e) {
-      setMsg(e.message || 'Erro ao lançar')
+      setMsgType('error')
+      setMsg(e.message || 'Não foi possível registrar a movimentação.')
     }
   }
 
@@ -208,15 +214,16 @@ export default function ContractDetail() {
           <div className="brand">
             <div className="logo" />
             <div>
-              <div className="h1">Contrato</div>
-              <div className="small">Carregando...</div>
+              <div className="h1">Detalhes do contrato</div>
+              <div className="small">Carregando informações...</div>
             </div>
           </div>
-          <Link className="btn" to="/">Voltar</Link>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
+
         {msg && (
-          <div className="card">
-            <div style={{ fontWeight: 800 }}>{msg}</div>
+          <div className={`notice ${msgType === 'error' ? 'notice-error' : 'notice-info'}`}>
+            {msg}
           </div>
         )}
       </div>
@@ -231,329 +238,400 @@ export default function ContractDetail() {
           <div>
             <div className="h1">{contract.numero_contrato}</div>
             <div className="small">{contract.empresa} • {contract.cnpj}</div>
+            <div className="page-subnav">
+              <span className="badge">{contract.status}</span>
+              <span className="badge">
+                <span className={`dot ${semDot(contract.semaforo)}`} /> {contract.semaforo}
+              </span>
+            </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn" onClick={load} disabled={loading}>
-            {loading ? 'Atualizando...' : 'Atualizar'}
+
+        <div className="actions">
+          <button className="btn btn-secondary" onClick={load} disabled={loading}>
+            {loading ? 'Atualizando...' : 'Atualizar dados'}
           </button>
-          <Link className="btn" to="/">Voltar</Link>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
       </div>
 
       {msg && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <div className="small" style={{ fontWeight: 900 }}>{msg}</div>
+        <div className={`notice ${msgType === 'success' ? 'notice-success' : msgType === 'error' ? 'notice-error' : 'notice-info'}`} style={{ marginBottom: 16 }}>
+          {msg}
         </div>
       )}
 
-      <div className="grid" style={{ gridTemplateColumns: '420px 1fr' }}>
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div style={{ fontWeight: 900 }}>Resumo</div>
-            <span className="badge">
-              <span className={`dot ${semDot(contract.semaforo)}`} /> {contract.semaforo}
-            </span>
-          </div>
-
-          <div className="small">Vigência</div>
-          <div style={{ fontWeight: 900, marginTop: 4 }}>
-            {new Date(contract.data_inicio).toLocaleDateString('pt-BR')} → {new Date(contract.data_fim).toLocaleDateString('pt-BR')}
-          </div>
-
-          <div className="small" style={{ marginTop: 8 }}>Dias para vencer</div>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>{contract.dias_para_vencer}</div>
-
-          <div className="small" style={{ marginTop: 10 }}>Saldo atual</div>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>
-            R$ {saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <div className="small">Renovável</div>
-            <div style={{ fontWeight: 900 }}>{contract.renovavel ? 'SIM' : 'NÃO'}</div>
-
-            <div className="small" style={{ marginTop: 6 }}>Pode renovar</div>
-            <div style={{ fontWeight: 900 }}>{contract.pode_renovar ? 'SIM' : 'NÃO'}</div>
-
-            <div className="small" style={{ marginTop: 6 }}>Limite renovação</div>
-            <div style={{ fontWeight: 900 }}>
-              {new Date(contract.limite_renovacao).toLocaleDateString('pt-BR')}
+      <div className="grid">
+        <div>
+          <div className="card card-muted">
+            <div className="card-header">
+              <div className="h2">Resumo do contrato</div>
+              <span className="status-chip">
+                <span className={`dot ${semDot(contract.semaforo)}`} /> {contract.semaforo}
+              </span>
             </div>
-          </div>
 
-          <div style={{ marginTop: 12 }}>
-            <div className="small">Gestor</div>
-            <div style={{ fontWeight: 900 }}>{contract.gestor?.name || '—'}</div>
+            <div className="info-list">
+              <div className="info-item">
+                <div className="info-label">Vigência</div>
+                <div className="info-value">
+                  {new Date(contract.data_inicio).toLocaleDateString('pt-BR')} até {new Date(contract.data_fim).toLocaleDateString('pt-BR')}
+                </div>
+              </div>
 
-            <div className="small" style={{ marginTop: 6 }}>Fiscal</div>
-            <div style={{ fontWeight: 900 }}>{contract.fiscal?.name || '—'}</div>
+              <div className="info-item">
+                <div className="info-label">Dias para vencimento</div>
+                <div className="info-value">{contract.dias_para_vencer}</div>
+              </div>
+
+              <div className="info-item">
+                <div className="info-label">Saldo atual</div>
+                <div className="info-value">
+                  R$ {saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+
+              <div className="info-item">
+                <div className="info-label">Renovação</div>
+                <div className="info-value">
+                  {contract.renovavel ? 'Contrato renovável' : 'Contrato não renovável'}
+                </div>
+                <div className="small" style={{ marginTop: 4 }}>
+                  {contract.pode_renovar ? 'Há possibilidade de renovação dentro do prazo.' : 'Sem possibilidade atual de renovação.'}
+                </div>
+              </div>
+
+              <div className="info-item">
+                <div className="info-label">Limite para renovação</div>
+                <div className="info-value">
+                  {new Date(contract.limite_renovacao).toLocaleDateString('pt-BR')}
+                </div>
+              </div>
+
+              <div className="info-item">
+                <div className="info-label">Gestor responsável</div>
+                <div className="info-value">{contract.gestor?.name || 'Não informado'}</div>
+              </div>
+
+              <div className="info-item">
+                <div className="info-label">Fiscal responsável</div>
+                <div className="info-value">{contract.fiscal?.name || 'Não informado'}</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="card">
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>Movimentações de saldo</div>
-          <div className="small" style={{ marginBottom: 10 }}>
-            Gestor/Fiscal/Admin podem lançar movimentações. Admin pode excluir (soft delete).
+        <div>
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <div className="h2">Lançamentos financeiros</div>
+                <div className="small">Histórico de movimentações vinculadas ao contrato</div>
+              </div>
+            </div>
+
+            {canCreateMovement ? (
+              <form onSubmit={submitMovement}>
+                <div className="form-grid">
+                  <div>
+                    <div className="label">Tipo de lançamento</div>
+                    <select
+                      className="input"
+                      value={form.tipo}
+                      onChange={e => setForm(prev => ({ ...prev, tipo: e.target.value }))}
+                    >
+                      <option value="EXECUCAO">Execução</option>
+                      <option value="ESTORNO">Estorno</option>
+                      <option value="AJUSTE">Ajuste</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="label">Valor</div>
+                    <input
+                      className="input"
+                      value={form.valor}
+                      onChange={e => setForm(prev => ({ ...prev, valor: e.target.value }))}
+                      placeholder="Informe o valor"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="label">Data do lançamento</div>
+                    <input
+                      className="input"
+                      type="date"
+                      value={form.data_movimento}
+                      onChange={e => setForm(prev => ({ ...prev, data_movimento: e.target.value }))}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="label">Número da nota fiscal</div>
+                    <input
+                      className="input"
+                      value={form.numero_nf}
+                      onChange={e => setForm(prev => ({ ...prev, numero_nf: e.target.value }))}
+                      placeholder="Opcional"
+                    />
+                  </div>
+
+                  <div className="form-full">
+                    <div className="label">Descrição</div>
+                    <input
+                      className="input"
+                      value={form.descricao}
+                      onChange={e => setForm(prev => ({ ...prev, descricao: e.target.value }))}
+                      placeholder="Informação complementar"
+                    />
+                  </div>
+                </div>
+
+                <div className="actions" style={{ marginTop: 14 }}>
+                  <button className="btn">Registrar movimentação</button>
+                </div>
+              </form>
+            ) : (
+              <div className="notice notice-info" style={{ marginBottom: 14 }}>
+                Seu perfil possui permissão apenas para consulta. Não é possível registrar movimentações.
+              </div>
+            )}
+
+            <div className="table-wrap" style={{ marginTop: 16 }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>Valor</th>
+                    <th>Nota fiscal</th>
+                    <th>Descrição</th>
+                    {isAdmin && <th>Ação</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {movs.map(m => (
+                    <tr
+                      key={m.id}
+                      className="row"
+                      style={m.is_deleted ? { opacity: 0.55, textDecoration: 'line-through' } : undefined}
+                    >
+                      <td>{new Date(m.data_movimento).toLocaleDateString('pt-BR')}</td>
+                      <td style={{ fontWeight: 800 }}>{m.tipo}</td>
+                      <td>
+                        R$ {Number(m.valor || 0).toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td>{m.numero_nf || 'Não informada'}</td>
+                      <td>
+                        {m.descricao || 'Sem descrição'}
+                        {m.is_deleted && (
+                          <div className="small" style={{ marginTop: 4 }}>
+                            Excluída logicamente • Motivo: {m.delete_reason || 'Não informado'}
+                          </div>
+                        )}
+                      </td>
+                      {isAdmin && (
+                        <td>
+                          {m.is_deleted ? (
+                            <span className="small">Indisponível</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              onClick={() => handleDeleteMovement(m)}
+                            >
+                              Excluir
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+
+                  {movs.length === 0 && (
+                    <tr>
+                      <td colSpan={isAdmin ? 6 : 5}>
+                        <div className="empty-state">
+                          Ainda não há movimentações registradas para este contrato.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {canCreateMovement ? (
-            <form
-              onSubmit={submitMovement}
-              style={{ display: 'grid', gridTemplateColumns: '140px 140px 160px 1fr', gap: 10, marginBottom: 12 }}
-            >
-              <select
-                className="input"
-                value={form.tipo}
-                onChange={e => setForm(prev => ({ ...prev, tipo: e.target.value }))}
-              >
-                <option value="EXECUCAO">EXECUÇÃO</option>
-                <option value="ESTORNO">ESTORNO</option>
-                <option value="AJUSTE">AJUSTE</option>
-              </select>
+          {isAdmin && (
+            <div className="card">
+              <div className="h2" style={{ marginBottom: 12 }}>Atualização cadastral</div>
+              <div className="small" style={{ marginBottom: 14 }}>
+                Utilize este formulário para atualizar informações administrativas do contrato.
+              </div>
 
-              <input
-                className="input"
-                value={form.valor}
-                onChange={e => setForm(prev => ({ ...prev, valor: e.target.value }))}
-                placeholder="Valor"
-              />
+              <form onSubmit={submitContractUpdate}>
+                <div className="panel" style={{ marginBottom: 14 }}>
+                  <div className="section-title">Dados da empresa</div>
+                  <div className="form-grid">
+                    <div>
+                      <div className="label">Razão social</div>
+                      <input
+                        className="input"
+                        value={editForm.razao_social}
+                        onChange={e => onEditChange('razao_social', e.target.value)}
+                      />
+                    </div>
 
-              <input
-                className="input"
-                type="date"
-                value={form.data_movimento}
-                onChange={e => setForm(prev => ({ ...prev, data_movimento: e.target.value }))}
-              />
+                    <div>
+                      <div className="label">CNPJ</div>
+                      <input
+                        className="input"
+                        value={editForm.cnpj}
+                        onChange={e => onEditChange('cnpj', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
 
-              <input
-                className="input"
-                value={form.numero_nf}
-                onChange={e => setForm(prev => ({ ...prev, numero_nf: e.target.value }))}
-                placeholder="NF (opcional)"
-              />
+                <div className="panel" style={{ marginBottom: 14 }}>
+                  <div className="section-title">Dados do contrato</div>
+                  <div className="form-grid">
+                    <div>
+                      <div className="label">Número do contrato</div>
+                      <input
+                        className="input"
+                        value={editForm.numero_contrato}
+                        onChange={e => onEditChange('numero_contrato', e.target.value)}
+                      />
+                    </div>
 
-              <input
-                className="input"
-                style={{ gridColumn: '1 / -1' }}
-                value={form.descricao}
-                onChange={e => setForm(prev => ({ ...prev, descricao: e.target.value }))}
-                placeholder="Descrição (opcional)"
-              />
+                    <div>
+                      <div className="label">Status</div>
+                      <select
+                        className="input"
+                        value={editForm.status}
+                        onChange={e => onEditChange('status', e.target.value)}
+                      >
+                        <option value="ATIVO">Ativo</option>
+                        <option value="SUSPENSO">Suspenso</option>
+                        <option value="ENCERRADO">Encerrado</option>
+                      </select>
+                    </div>
 
-              <button className="btn" style={{ gridColumn: '1 / -1' }}>
-                Lançar movimentação
-              </button>
-            </form>
-          ) : (
-            <div className="small" style={{ marginBottom: 12, fontWeight: 900 }}>
-              Seu perfil é somente leitura. Você não pode lançar movimentações.
+                    <div>
+                      <div className="label">Data inicial</div>
+                      <input
+                        className="input"
+                        type="date"
+                        value={editForm.data_inicio}
+                        onChange={e => onEditChange('data_inicio', e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="label">Data final</div>
+                      <input
+                        className="input"
+                        type="date"
+                        value={editForm.data_fim}
+                        onChange={e => onEditChange('data_fim', e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="label">Valor inicial</div>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editForm.valor_inicial}
+                        onChange={e => onEditChange('valor_inicial', e.target.value)}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'end' }}>
+                      <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700 }}>
+                        <input
+                          type="checkbox"
+                          checked={editForm.renovavel}
+                          onChange={e => onEditChange('renovavel', e.target.checked)}
+                        />
+                        Permitir renovação
+                      </label>
+                    </div>
+
+                    <div className="form-full">
+                      <div className="label">Objeto contratual</div>
+                      <input
+                        className="input"
+                        value={editForm.objeto}
+                        onChange={e => onEditChange('objeto', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="panel" style={{ marginBottom: 14 }}>
+                  <div className="section-title">Responsáveis e observações</div>
+                  <div className="form-grid">
+                    <div>
+                      <div className="label">Gestor</div>
+                      <select
+                        className="input"
+                        value={editForm.gestor_id}
+                        onChange={e => onEditChange('gestor_id', e.target.value)}
+                      >
+                        <option value="">Não informado</option>
+                        {users.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.role})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="label">Fiscal</div>
+                      <select
+                        className="input"
+                        value={editForm.fiscal_id}
+                        onChange={e => onEditChange('fiscal_id', e.target.value)}
+                      >
+                        <option value="">Não informado</option>
+                        {users.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.role})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-full">
+                      <div className="label">Observações</div>
+                      <textarea
+                        className="input"
+                        rows="3"
+                        value={editForm.observacoes}
+                        onChange={e => onEditChange('observacoes', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="actions">
+                  <button className="btn" disabled={savingContract}>
+                    {savingContract ? 'Salvando alterações...' : 'Salvar alterações'}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
-
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>NF</th>
-                <th>Descrição</th>
-                {isAdmin && <th>Ações</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {movs.map(m => (
-                <tr
-                  key={m.id}
-                  className="row"
-                  style={m.is_deleted ? { opacity: 0.5, textDecoration: 'line-through' } : undefined}
-                >
-                  <td>{new Date(m.data_movimento).toLocaleDateString('pt-BR')}</td>
-                  <td style={{ fontWeight: 900 }}>{m.tipo}</td>
-                  <td>
-                    R$ {Number(m.valor || 0).toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </td>
-                  <td>{m.numero_nf || '—'}</td>
-                  <td>{m.descricao || '—'}</td>
-                  {isAdmin && (
-                    <td>
-                      {m.is_deleted ? '—' : (
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => handleDeleteMovement(m)}
-                        >
-                          Excluir
-                        </button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-
-              {movs.length === 0 && (
-                <tr>
-                  <td colSpan={isAdmin ? 6 : 5} className="small" style={{ padding: 16, opacity: 0.8 }}>
-                    Sem movimentações.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
-
-      {isAdmin && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <div style={{ fontWeight: 900, marginBottom: 12 }}>Editar contrato</div>
-
-          <form onSubmit={submitContractUpdate}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div className="small">Razão social *</div>
-                <input
-                  className="input"
-                  value={editForm.razao_social}
-                  onChange={e => onEditChange('razao_social', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <div className="small">CNPJ *</div>
-                <input
-                  className="input"
-                  value={editForm.cnpj}
-                  onChange={e => onEditChange('cnpj', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <div className="small">Nº Contrato *</div>
-                <input
-                  className="input"
-                  value={editForm.numero_contrato}
-                  onChange={e => onEditChange('numero_contrato', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <div className="small">Status</div>
-                <select
-                  className="input"
-                  value={editForm.status}
-                  onChange={e => onEditChange('status', e.target.value)}
-                >
-                  <option value="ATIVO">ATIVO</option>
-                  <option value="SUSPENSO">SUSPENSO</option>
-                  <option value="ENCERRADO">ENCERRADO</option>
-                </select>
-              </div>
-
-              <div>
-                <div className="small">Data início *</div>
-                <input
-                  className="input"
-                  type="date"
-                  value={editForm.data_inicio}
-                  onChange={e => onEditChange('data_inicio', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <div className="small">Data fim *</div>
-                <input
-                  className="input"
-                  type="date"
-                  value={editForm.data_fim}
-                  onChange={e => onEditChange('data_fim', e.target.value)}
-                />
-              </div>
-
-              <div>
-                <div className="small">Valor inicial *</div>
-                <input
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editForm.valor_inicial}
-                  onChange={e => onEditChange('valor_inicial', e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'end', gap: 10 }}>
-                <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={editForm.renovavel}
-                    onChange={e => onEditChange('renovavel', e.target.checked)}
-                  />
-                  Renovável
-                </label>
-              </div>
-
-              <div>
-                <div className="small">Gestor</div>
-                <select
-                  className="input"
-                  value={editForm.gestor_id}
-                  onChange={e => onEditChange('gestor_id', e.target.value)}
-                >
-                  <option value="">—</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <div className="small">Fiscal</div>
-                <select
-                  className="input"
-                  value={editForm.fiscal_id}
-                  onChange={e => onEditChange('fiscal_id', e.target.value)}
-                >
-                  <option value="">—</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div className="small">Objeto</div>
-                <input
-                  className="input"
-                  value={editForm.objeto}
-                  onChange={e => onEditChange('objeto', e.target.value)}
-                />
-              </div>
-
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div className="small">Observações</div>
-                <textarea
-                  className="input"
-                  rows="3"
-                  value={editForm.observacoes}
-                  onChange={e => onEditChange('observacoes', e.target.value)}
-                />
-              </div>
-            </div>
-
-            <button className="btn" style={{ marginTop: 14 }} disabled={savingContract}>
-              {savingContract ? 'Salvando alterações...' : 'Salvar alterações do contrato'}
-            </button>
-          </form>
-        </div>
-      )}
     </div>
   )
 }
