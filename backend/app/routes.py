@@ -20,6 +20,7 @@ from .models.user import User
 
 api_bp = Blueprint("api", __name__)
 
+
 def _dec(v):
     try:
         return Decimal(str(v)) if v is not None else Decimal("0")
@@ -95,10 +96,21 @@ def get_contract(contract_id: int):
 
         gestor = None
         if c.gestor:
-            gestor = {"id": c.gestor.id, "name": c.gestor.name, "email": c.gestor.email, "role": c.gestor.role}
+            gestor = {
+                "id": c.gestor.id,
+                "name": c.gestor.name,
+                "email": c.gestor.email,
+                "role": c.gestor.role,
+            }
+
         fiscal = None
         if c.fiscal:
-            fiscal = {"id": c.fiscal.id, "name": c.fiscal.name, "email": c.fiscal.email, "role": c.fiscal.role}
+            fiscal = {
+                "id": c.fiscal.id,
+                "name": c.fiscal.name,
+                "email": c.fiscal.email,
+                "role": c.fiscal.role,
+            }
 
         return jsonify({
             "id": c.id,
@@ -124,6 +136,7 @@ def get_contract(contract_id: int):
     finally:
         db.close()
 
+
 @api_bp.post("/contracts")
 @auth_required
 @roles_required("ADMIN")
@@ -143,9 +156,11 @@ def create_contract():
 
         numero_contrato = (data.get("numero_contrato") or "").strip()
         objeto = (data.get("objeto") or "").strip() or None
+        status = (data.get("status") or "ATIVO").strip().upper()
+        renovavel = bool(data.get("renovavel", False))
+
         if status not in ("ATIVO", "SUSPENSO", "ENCERRADO"):
             return jsonify({"error": "status inválido"}), 400
-        renovavel = bool(data.get("renovavel", False))
 
         valor_inicial = _dec(data.get("valor_inicial"))
         if not numero_contrato:
@@ -165,11 +180,16 @@ def create_contract():
         gestor_id = data.get("gestor_id")
         fiscal_id = data.get("fiscal_id")
 
-        exists = db.execute(select(Contract).where(Contract.numero_contrato == numero_contrato)).scalars().first()
+        exists = db.execute(
+            select(Contract).where(Contract.numero_contrato == numero_contrato)
+        ).scalars().first()
         if exists:
             return jsonify({"error": "numero_contrato já cadastrado"}), 409
 
-        comp = db.execute(select(Company).where(Company.cnpj == cnpj_digits)).scalars().first()
+        comp = db.execute(
+            select(Company).where(Company.cnpj == cnpj_digits)
+        ).scalars().first()
+
         if not comp:
             comp = Company(razao_social=razao_social, cnpj=cnpj_digits)
             db.add(comp)
@@ -197,11 +217,21 @@ def create_contract():
         db.commit()
         db.refresh(c)
 
-        log_audit(db, g.user_id, 'CREATE', 'contract', c.id, {'numero_contrato': c.numero_contrato, 'cnpj': cnpj_digits})
+        log_audit(
+            db,
+            g.user_id,
+            "CREATE",
+            "contract",
+            c.id,
+            {"numero_contrato": c.numero_contrato, "cnpj": cnpj_digits},
+        )
         db.commit()
+
         return jsonify({"id": c.id, "numero_contrato": c.numero_contrato}), 201
     finally:
         db.close()
+
+
 @api_bp.patch("/contracts/<int:contract_id>")
 @auth_required
 @roles_required("ADMIN")
@@ -210,11 +240,15 @@ def update_contract(contract_id: int):
     try:
         data = request.get_json(force=True) or {}
 
-        c = db.execute(select(Contract).where(Contract.id == contract_id)).scalars().first()
+        c = db.execute(
+            select(Contract).where(Contract.id == contract_id)
+        ).scalars().first()
         if not c:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
-        comp = db.execute(select(Company).where(Company.id == c.company_id)).scalars().first()
+        comp = db.execute(
+            select(Company).where(Company.id == c.company_id)
+        ).scalars().first()
         if not comp:
             return jsonify({"error": "Empresa do contrato não encontrada"}), 404
 
@@ -244,6 +278,17 @@ def update_contract(contract_id: int):
             cnpj_digits = "".join([ch for ch in cnpj if ch.isdigit()])
             if not cnpj_digits:
                 return jsonify({"error": "cnpj inválido"}), 400
+
+            existing_company = db.execute(
+                select(Company).where(
+                    Company.cnpj == cnpj_digits,
+                    Company.id != comp.id
+                )
+            ).scalars().first()
+
+            if existing_company:
+                return jsonify({"error": "cnpj já cadastrado para outra empresa"}), 409
+
             comp.cnpj = cnpj_digits
 
         if "numero_contrato" in data and data["numero_contrato"] is not None:
@@ -264,8 +309,7 @@ def update_contract(contract_id: int):
             c.numero_contrato = numero_contrato
 
         if "objeto" in data:
-            objeto = (data.get("objeto") or "").strip() or None
-            c.objeto = objeto
+            c.objeto = (data.get("objeto") or "").strip() or None
 
         if "status" in data and data["status"] is not None:
             status = str(data["status"]).strip().upper()
@@ -312,7 +356,7 @@ def update_contract(contract_id: int):
             c.fiscal_id = int(fiscal_id) if fiscal_id else None
 
         if "observacoes" in data:
-            c.observacoes = (data.get("observacoes") or None)
+            c.observacoes = data.get("observacoes") or None
 
         db.commit()
         db.refresh(c)
@@ -333,16 +377,24 @@ def update_contract(contract_id: int):
             "observacoes": c.observacoes,
         }
 
-        log_audit(db, g.user_id, "UPDATE", "contract", c.id, {"before": before, "after": after})
+        log_audit(
+            db,
+            g.user_id,
+            "UPDATE",
+            "contract",
+            c.id,
+            {"before": before, "after": after},
+        )
         db.commit()
 
         return jsonify({
             "id": c.id,
             "numero_contrato": c.numero_contrato,
-            "message": "Contrato atualizado com sucesso"
+            "message": "Contrato atualizado com sucesso",
         })
     finally:
         db.close()
+
 
 @api_bp.post("/jobs/run-alerts")
 @auth_required
@@ -350,6 +402,7 @@ def update_contract(contract_id: int):
 def run_alerts_manual():
     from .scheduler import run_alerts
     return jsonify(run_alerts(current_app))
+
 
 @api_bp.get("/users")
 @auth_required
@@ -364,6 +417,7 @@ def list_users():
         ])
     finally:
         db.close()
+
 
 @api_bp.post("/users")
 @auth_required
@@ -396,11 +450,13 @@ def create_user():
         db.commit()
         db.refresh(u)
 
-        log_audit(db, g.user_id, 'CREATE', 'user', u.id, {'email': u.email, 'role': u.role})
+        log_audit(db, g.user_id, "CREATE", "user", u.id, {"email": u.email, "role": u.role})
         db.commit()
+
         return jsonify({"id": u.id, "name": u.name, "email": u.email, "role": u.role, "active": u.active}), 201
     finally:
         db.close()
+
 
 # Movimentações
 def _can_manage_contract(user_role: str, user_id: int, contract: Contract) -> bool:
@@ -409,6 +465,7 @@ def _can_manage_contract(user_role: str, user_id: int, contract: Contract) -> bo
     if user_role in ("GESTOR", "FISCAL"):
         return (contract.gestor_id == user_id) or (contract.fiscal_id == user_id)
     return False
+
 
 @api_bp.get("/contracts/<int:contract_id>/movements")
 @auth_required
@@ -446,10 +503,10 @@ def list_movements(contract_id: int):
     finally:
         db.close()
 
+
 @api_bp.post("/contracts/<int:contract_id>/movements")
 @auth_required
 def create_movement(contract_id: int):
-    from flask import g
     db = SessionLocal()
     try:
         contract = db.execute(select(Contract).where(Contract.id == contract_id)).scalars().first()
@@ -492,7 +549,14 @@ def create_movement(contract_id: int):
         db.commit()
         db.refresh(m)
 
-        log_audit(db, g.user_id, 'CREATE', 'movement', m.id, {'contract_id': contract_id, 'tipo': tipo, 'valor': float(valor)})
+        log_audit(
+            db,
+            g.user_id,
+            "CREATE",
+            "movement",
+            m.id,
+            {"contract_id": contract_id, "tipo": tipo, "valor": float(valor)},
+        )
         db.commit()
 
         return jsonify({
@@ -518,19 +582,18 @@ def create_movement(contract_id: int):
 @auth_required
 @roles_required("ADMIN")
 def delete_movement(movement_id: int):
-    from flask import g
     db = SessionLocal()
     try:
         data = request.get_json(silent=True) or {}
-        reason = (data.get('reason') or '').strip()
+        reason = (data.get("reason") or "").strip()
         if not reason:
-            return jsonify({'error': 'reason é obrigatório'}), 400
+            return jsonify({"error": "reason é obrigatório"}), 400
 
         m = db.execute(select(SaldoMovement).where(SaldoMovement.id == movement_id)).scalars().first()
         if not m:
-            return jsonify({'error': 'Movimentação não encontrada'}), 404
+            return jsonify({"error": "Movimentação não encontrada"}), 404
         if m.is_deleted:
-            return jsonify({'ok': True, 'already_deleted': True}), 200
+            return jsonify({"ok": True, "already_deleted": True}), 200
 
         m.is_deleted = True
         m.deleted_at = dt.datetime.now(dt.timezone.utc)
@@ -538,10 +601,17 @@ def delete_movement(movement_id: int):
         m.delete_reason = reason
         db.commit()
 
-        log_audit(db, g.user_id, 'DELETE', 'movement', m.id, {'reason': reason, 'contract_id': m.contract_id})
+        log_audit(
+            db,
+            g.user_id,
+            "DELETE",
+            "movement",
+            m.id,
+            {"reason": reason, "contract_id": m.contract_id},
+        )
         db.commit()
 
-        return jsonify({'ok': True})
+        return jsonify({"ok": True})
     finally:
         db.close()
 
@@ -555,11 +625,11 @@ def delete_movement(movement_id: int):
 def list_audit():
     db = SessionLocal()
     try:
-        q_entity = request.args.get('entity')
-        q_action = request.args.get('action')
-        q_user = request.args.get('user_id')
-        q_from = request.args.get('from')
-        q_to = request.args.get('to')
+        q_entity = request.args.get("entity")
+        q_action = request.args.get("action")
+        q_user = request.args.get("user_id")
+        q_from = request.args.get("from")
+        q_to = request.args.get("to")
 
         stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(500)
         if q_entity:
@@ -587,14 +657,14 @@ def list_audit():
         rows = db.execute(stmt).scalars().all()
         return jsonify([
             {
-                'id': a.id,
-                'created_at': a.created_at.isoformat() if a.created_at else None,
-                'user_id': a.user_id,
-                'action': a.action,
-                'entity': a.entity,
-                'entity_id': a.entity_id,
-                'changes': a.changes,
-                'ip': a.ip,
+                "id": a.id,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+                "user_id": a.user_id,
+                "action": a.action,
+                "entity": a.entity,
+                "entity_id": a.entity_id,
+                "changes": a.changes,
+                "ip": a.ip,
             }
             for a in rows
         ])
@@ -615,14 +685,14 @@ def list_alerts():
         rows = db.execute(stmt).scalars().all()
         return jsonify([
             {
-                'id': a.id,
-                'created_at': a.created_at.isoformat() if a.created_at else None,
-                'contract_id': a.contract_id,
-                'alert_type': a.alert_type,
-                'recipients': a.recipients,
-                'status': a.status,
-                'error': a.error,
-                'meta': a.meta,
+                "id": a.id,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+                "contract_id": a.contract_id,
+                "alert_type": a.alert_type,
+                "recipients": a.recipients,
+                "status": a.status,
+                "error": a.error,
+                "meta": a.meta,
             }
             for a in rows
         ])
@@ -634,34 +704,33 @@ def list_alerts():
 @auth_required
 @roles_required("ADMIN")
 def update_user(user_id: int):
-    from flask import g
     data = request.get_json(force=True) or {}
     db = SessionLocal()
     try:
         u = db.execute(select(User).where(User.id == user_id)).scalars().first()
         if not u:
-            return jsonify({'error': 'Usuário não encontrado'}), 404
+            return jsonify({"error": "Usuário não encontrado"}), 404
 
-        before = {'name': u.name, 'email': u.email, 'role': u.role, 'active': u.active}
+        before = {"name": u.name, "email": u.email, "role": u.role, "active": u.active}
 
-        if 'name' in data and data['name'] is not None:
-            u.name = str(data['name']).strip()
-        if 'role' in data and data['role'] is not None:
-            role = str(data['role']).strip().upper()
-            if role not in ('ADMIN','GESTOR','FISCAL','CONSULTA'):
-                return jsonify({'error': 'role inválido'}), 400
+        if "name" in data and data["name"] is not None:
+            u.name = str(data["name"]).strip()
+        if "role" in data and data["role"] is not None:
+            role = str(data["role"]).strip().upper()
+            if role not in ("ADMIN", "GESTOR", "FISCAL", "CONSULTA"):
+                return jsonify({"error": "role inválido"}), 400
             u.role = role
-        if 'active' in data and data['active'] is not None:
-            u.active = bool(data['active'])
-        if 'password' in data and data['password']:
-            u.set_password(str(data['password']))
+        if "active" in data and data["active"] is not None:
+            u.active = bool(data["active"])
+        if "password" in data and data["password"]:
+            u.set_password(str(data["password"]))
 
         db.commit()
 
-        after = {'name': u.name, 'email': u.email, 'role': u.role, 'active': u.active}
-        log_audit(db, g.user_id, 'UPDATE', 'user', u.id, {'before': before, 'after': after})
+        after = {"name": u.name, "email": u.email, "role": u.role, "active": u.active}
+        log_audit(db, g.user_id, "UPDATE", "user", u.id, {"before": before, "after": after})
         db.commit()
 
-        return jsonify({'id': u.id, 'name': u.name, 'email': u.email, 'role': u.role, 'active': u.active})
+        return jsonify({"id": u.id, "name": u.name, "email": u.email, "role": u.role, "active": u.active})
     finally:
         db.close()
