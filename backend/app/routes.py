@@ -143,7 +143,8 @@ def create_contract():
 
         numero_contrato = (data.get("numero_contrato") or "").strip()
         objeto = (data.get("objeto") or "").strip() or None
-        status = (data.get("status") or "ATIVO").strip().upper()
+        if status not in ("ATIVO", "SUSPENSO", "ENCERRADO"):
+            return jsonify({"error": "status inválido"}), 400
         renovavel = bool(data.get("renovavel", False))
 
         valor_inicial = _dec(data.get("valor_inicial"))
