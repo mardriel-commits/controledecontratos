@@ -25,7 +25,7 @@ export default function Login() {
       await api.login(email, password)
       nav(redirectTo, { replace: true })
     } catch (err) {
-      setError(err?.message || 'Falha no login')
+      setError(err?.message || 'Não foi possível iniciar a sessão.')
     } finally {
       setLoading(false)
     }
@@ -33,9 +33,12 @@ export default function Login() {
 
   if (authLoading) {
     return (
-      <div className="container" style={{ maxWidth: 520 }}>
-        <div className="card" style={{ marginTop: 12, textAlign: 'center' }}>
-          Carregando...
+      <div className="container" style={{ maxWidth: 520, paddingTop: 60 }}>
+        <div className="card" style={{ textAlign: 'center' }}>
+          <div className="h2">Aguarde</div>
+          <div className="small" style={{ marginTop: 8 }}>
+            Verificando as informações de acesso.
+          </div>
         </div>
       </div>
     )
@@ -46,52 +49,64 @@ export default function Login() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: 520 }}>
-      <div className="topbar">
-        <div className="brand">
+    <div className="container" style={{ maxWidth: 560, paddingTop: 48 }}>
+      <div className="card" style={{ padding: 24 }}>
+        <div className="brand" style={{ marginBottom: 18 }}>
           <div className="logo" />
           <div>
             <div className="h1">Gestão de Contratos</div>
-            <div className="small">Acesso restrito • Login local</div>
+            <div className="small">Acesso ao ambiente administrativo</div>
           </div>
         </div>
-      </div>
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ fontWeight: 900, marginBottom: 12 }}>Entrar</div>
+        <div className="notice notice-info" style={{ marginBottom: 16 }}>
+          Utilize suas credenciais para acessar o sistema.
+        </div>
 
         <form onSubmit={submit}>
-          <div className="small" style={{ marginBottom: 6 }}>E-mail</div>
-          <input
-            className="input"
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="admin@sebrae.local"
-          />
+          <div className="panel">
+            <div className="section-title">Identificação</div>
 
-          <div className="small" style={{ margin: '12px 0 6px' }}>Senha</div>
-          <input
-            className="input"
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
+            <div className="form-grid">
+              <div className="form-full">
+                <div className="label">E-mail</div>
+                <input
+                  className="input"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="usuario@instituicao.com"
+                />
+              </div>
+
+              <div className="form-full">
+                <div className="label">Senha</div>
+                <input
+                  className="input"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Informe sua senha"
+                />
+              </div>
+            </div>
+          </div>
 
           {error && (
-            <div style={{ marginTop: 10, fontSize: 13, fontWeight: 800, color: '#b42318' }}>
+            <div className="notice notice-error" style={{ marginTop: 14 }}>
               {error}
             </div>
           )}
 
-          <button className="btn" style={{ marginTop: 14, width: '100%' }} disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
+          <div className="actions" style={{ marginTop: 16 }}>
+            <button className="btn" disabled={loading}>
+              {loading ? 'Entrando...' : 'Acessar sistema'}
+            </button>
+          </div>
         </form>
 
-        <div className="small" style={{ marginTop: 10 }}>
-          API: {api.API_BASE}
+        <div className="small" style={{ marginTop: 16 }}>
+          Ambiente conectado à API: {api.API_BASE}
         </div>
       </div>
     </div>
