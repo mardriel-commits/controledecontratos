@@ -15,6 +15,7 @@ export default function ContractDetail() {
   const { user } = useAuth()
 
   const isAdmin = user?.role === 'ADMIN'
+  const canCreateMovement = ['ADMIN', 'GESTOR', 'FISCAL'].includes(user?.role)
 
   const [contract, setContract] = useState(null)
   const [movs, setMovs] = useState([])
@@ -293,56 +294,62 @@ export default function ContractDetail() {
         <div className="card">
           <div style={{ fontWeight: 900, marginBottom: 10 }}>Movimentações de saldo</div>
           <div className="small" style={{ marginBottom: 10 }}>
-            Gestor/Fiscal: use ESTORNO/AJUSTE • Admin: pode excluir (soft delete)
+            Gestor/Fiscal/Admin podem lançar movimentações. Admin pode excluir (soft delete).
           </div>
 
-          <form
-            onSubmit={submitMovement}
-            style={{ display: 'grid', gridTemplateColumns: '140px 140px 160px 1fr', gap: 10, marginBottom: 12 }}
-          >
-            <select
-              className="input"
-              value={form.tipo}
-              onChange={e => setForm(prev => ({ ...prev, tipo: e.target.value }))}
+          {canCreateMovement ? (
+            <form
+              onSubmit={submitMovement}
+              style={{ display: 'grid', gridTemplateColumns: '140px 140px 160px 1fr', gap: 10, marginBottom: 12 }}
             >
-              <option value="EXECUCAO">EXECUÇÃO</option>
-              <option value="ESTORNO">ESTORNO</option>
-              <option value="AJUSTE">AJUSTE</option>
-            </select>
+              <select
+                className="input"
+                value={form.tipo}
+                onChange={e => setForm(prev => ({ ...prev, tipo: e.target.value }))}
+              >
+                <option value="EXECUCAO">EXECUÇÃO</option>
+                <option value="ESTORNO">ESTORNO</option>
+                <option value="AJUSTE">AJUSTE</option>
+              </select>
 
-            <input
-              className="input"
-              value={form.valor}
-              onChange={e => setForm(prev => ({ ...prev, valor: e.target.value }))}
-              placeholder="Valor"
-            />
+              <input
+                className="input"
+                value={form.valor}
+                onChange={e => setForm(prev => ({ ...prev, valor: e.target.value }))}
+                placeholder="Valor"
+              />
 
-            <input
-              className="input"
-              type="date"
-              value={form.data_movimento}
-              onChange={e => setForm(prev => ({ ...prev, data_movimento: e.target.value }))}
-            />
+              <input
+                className="input"
+                type="date"
+                value={form.data_movimento}
+                onChange={e => setForm(prev => ({ ...prev, data_movimento: e.target.value }))}
+              />
 
-            <input
-              className="input"
-              value={form.numero_nf}
-              onChange={e => setForm(prev => ({ ...prev, numero_nf: e.target.value }))}
-              placeholder="NF (opcional)"
-            />
+              <input
+                className="input"
+                value={form.numero_nf}
+                onChange={e => setForm(prev => ({ ...prev, numero_nf: e.target.value }))}
+                placeholder="NF (opcional)"
+              />
 
-            <input
-              className="input"
-              style={{ gridColumn: '1 / -1' }}
-              value={form.descricao}
-              onChange={e => setForm(prev => ({ ...prev, descricao: e.target.value }))}
-              placeholder="Descrição (opcional)"
-            />
+              <input
+                className="input"
+                style={{ gridColumn: '1 / -1' }}
+                value={form.descricao}
+                onChange={e => setForm(prev => ({ ...prev, descricao: e.target.value }))}
+                placeholder="Descrição (opcional)"
+              />
 
-            <button className="btn" style={{ gridColumn: '1 / -1' }}>
-              Lançar movimentação
-            </button>
-          </form>
+              <button className="btn" style={{ gridColumn: '1 / -1' }}>
+                Lançar movimentação
+              </button>
+            </form>
+          ) : (
+            <div className="small" style={{ marginBottom: 12, fontWeight: 900 }}>
+              Seu perfil é somente leitura. Você não pode lançar movimentações.
+            </div>
+          )}
 
           <table className="table">
             <thead>
