@@ -1,108 +1,173 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useApi } from '../lib/api'
+import { useAuth } from '../lib/auth'
 
-export default function NewContract() {
+function formatDateTime(value) {
+  if (!value) return '—'
+  try {
+    return new Date(value).toLocaleString('pt-BR')
+  } catch {
+    return value
+  }
+}
+
+function getAlertTypeLabel(type) {
+  if (!type) return 'Não informado'
+
+  const map = {
+    VENCIMENTO_30_DIAS: 'Vencimento em até 30 dias',
+    VENCIMENTO_15_DIAS: 'Vencimento em até 15 dias',
+    VENCIMENTO_IMINENTE: 'Vencimento iminente',
+    CONTRATO_VENCIDO: 'Contrato vencido',
+    RENOVACAO_LIMITE: 'Limite de renovação',
+    ALERTA_MANUAL: 'Alerta manual',
+  }
+
+  return map[type] || type
+}
+
+function getStatusLabel(status) {
+  if (!status) return 'Não informado'
+
+  const map = {
+    SUCCESS: 'Enviado',
+    SENT: 'Enviado',
+    OK: 'Concluído',
+    ERROR: 'Erro',
+    FAILED: 'Falha',
+    PENDING: 'Pendente',
+  }
+
+  return map[status] || status
+}
+
+function getStatusClass(status) {
+  const s = String(status || '').toUpperCase()
+
+  if (['SUCCESS', 'SENT', 'OK'].includes(s)) return 'notice-success'
+  if (['ERROR', 'FAILED'].includes(s)) return 'notice-error'
+  return 'notice-info'
+}
+
+function buildAlertSummary(row) {
+  const meta = row?.meta || {}
+  const contractId = row?.contract_id ?? meta?.contract_id ?? '—'
+  const recipients = Array.isArray(row?.recipients)
+    ? row.recipients.join(', ')
+    : row?.recipients || 'Não informado'
+
+  return {
+    title: getAlertTypeLabel(row.alert_type),
+    subtitle: `Contrato #${contractId}`,
+    recipients,
+  }
+}
+
+export default function Alerts() {
   const api = useApi()
-  const nav = useNavigate()
+  const { user } = useAuth()
 
-  const [users, setUsers] = useState([])
+  const isAdmin = user?.role === 'ADMIN'
+
+  const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
-  const [loadingUsers, setLoadingUsers] = useState(true)
-  const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
+  const [openId, setOpenId] = useState(null)
 
-  const [form, setForm] = useState({
-    razao_social: '',
-    cnpj: '',
-    numero_contrato: '',
-    objeto: '',
-    data_inicio: '',
-    data_fim: '',
-    status: 'ATIVO',
-    renovavel: false,
-    valor_inicial: '',
-    gestor_id: '',
-    fiscal_id: '',
-    observacoes: '',
+  const [filters, setFilters] = useState({
+    type: '',
+    status: '',
+    q: '',
   })
 
-  async function loadUsers() {
-    setLoadingUsers(true)
+  async function load() {
+    setLoading(true)
+    setMsg('')
     try {
-      const j = await api.getUsers()
-      setUsers(Array.isArray(j) ? j : [])
-    } catch {
-      setUsers([])
+      const j = await api.getAlerts()
+      setRows(Array.isArray(j) ? j : [])
+    } catch (e) {
+      setMsg(e.message || 'Não foi possível carregar os alertas.')
+      setRows([])
     } finally {
-      setLoadingUsers(false)
+      setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadUsers()
-  }, [])
+    if (isAdmin) load()
+  }, [isAdmin])
 
-  function onChange(k, v) {
-    setForm(prev => ({ ...prev, [k]: v }))
+  function setFilter(key, value) {
+    setFilters(prev => ({ ...prev, [key]: value }))
   }
 
-  function validate() {
-    if (!form.razao_social.trim()) return 'Informe a razão social.'
-    if (!form.cnpj.trim()) return 'Informe o CNPJ.'
-    if (!form.numero_contrato.trim()) return 'Informe o número do contrato.'
-    if (!form.data_inicio) return 'Informe a data de início.'
-    if (!form.data_fim) return 'Informe a data de fim.'
-    if (!form.valor_inicial || Number(form.valor_inicial) < 0) return 'Informe um valor inicial válido.'
-
-    if (form.data_inicio && form.data_fim && form.data_fim < form.data_inicio) {
-      return 'A data fim não pode ser anterior à data de início.'
-    }
-
-    return ''
+  function clearFilters() {
+    setFilters({
+      type: '',
+      status: '',
+      q: '',
+    })
   }
 
-  async function submit(e) {
-    e.preventDefault()
-    setError('')
-    setMsg('')
+  const filtered = useMemo(() => {
+    const search = filters.q.trim().toLowerCase()
 
-    const validationError = validate()
-    if (validationError) {
-      setError(validationError)
-      return
-    }
+    return rows.filter(r => {
+      const matchType = !filters.type || r.alert_type === filters.type
+      const matchStatus = !filters.status || String(r.status || '').toUpperCase() === filters.status
 
-    setLoading(true)
+      const searchable = [
+        r.alert_type,
+        r.status,
+        r.contract_id,
+        Array.isArray(r.recipients) ? r.recipients.join(' ') : r.recipients,
+        r.error,
+        JSON.stringify(r.meta || {}),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
 
-    try {
-      const payload = {
-        ...form,
-        cnpj: form.cnpj.trim(),
-        razao_social: form.razao_social.trim(),
-        numero_contrato: form.numero_contrato.trim(),
-        objeto: form.objeto.trim(),
-        observacoes: form.observacoes.trim(),
-        valor_inicial: Number(form.valor_inicial || 0),
-        gestor_id: form.gestor_id ? Number(form.gestor_id) : null,
-        fiscal_id: form.fiscal_id ? Number(form.fiscal_id) : null,
-      }
+      const matchText = !search || searchable.includes(search)
 
-      const j = await api.createContract(payload)
-      setMsg(`✅ Contrato criado: ${j.numero_contrato || payload.numero_contrato}`)
+      return matchType && matchStatus && matchText
+    })
+  }, [rows, filters])
 
-      setTimeout(() => {
-        if (j?.id) {
-          nav(`/contracts/${j.id}`)
-        } else {
-          nav('/')
-        }
-      }, 800)
-    } catch (err) {
-      setError(err?.message || 'Erro ao salvar contrato.')
-    } finally {
-      setLoading(false)
-    }
+  const stats = useMemo(() => {
+    const total = rows.length
+    const sent = rows.filter(r => ['SUCCESS', 'SENT', 'OK'].includes(String(r.status || '').toUpperCase())).length
+    const failed = rows.filter(r => ['ERROR', 'FAILED'].includes(String(r.status || '').toUpperCase())).length
+    const pending = rows.filter(r => ['PENDING'].includes(String(r.status || '').toUpperCase())).length
+
+    return { total, sent, failed, pending }
+  }, [rows])
+
+  const availableTypes = useMemo(() => {
+    return Array.from(new Set(rows.map(r => r.alert_type).filter(Boolean)))
+  }, [rows])
+
+  if (!isAdmin) {
+    return (
+      <div className="container">
+        <div className="topbar">
+          <div className="brand">
+            <div className="logo" />
+            <div>
+              <div className="h1">Avisos e notificações</div>
+              <div className="small">Acesso restrito</div>
+            </div>
+          </div>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
+        </div>
+
+        <div className="notice notice-info">
+          Esta área está disponível somente para perfis administrativos.
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -111,180 +176,259 @@ export default function NewContract() {
         <div className="brand">
           <div className="logo" />
           <div>
-            <div className="h1">Novo Contrato</div>
-            <div className="small">Cadastro manual (ADMIN)</div>
+            <div className="h1">Avisos e notificações</div>
+            <div className="small">Acompanhamento dos alertas gerados pelo sistema</div>
           </div>
         </div>
 
-        <button type="button" className="btn" onClick={() => nav('/')}>
-          Voltar
-        </button>
+        <div className="actions">
+          <button className="btn btn-secondary" onClick={load} disabled={loading}>
+            {loading ? 'Atualizando...' : 'Atualizar dados'}
+          </button>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
+        </div>
       </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
-        <form onSubmit={submit}>
-          <div className="small" style={{ fontWeight: 900, marginBottom: 10 }}>Empresa</div>
+      {msg && (
+        <div className="notice notice-error" style={{ marginBottom: 16 }}>
+          {msg}
+        </div>
+      )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <div className="small">Razão social *</div>
-              <input
-                className="input"
-                value={form.razao_social}
-                onChange={e => onChange('razao_social', e.target.value)}
-              />
+      <div className="grid">
+        <div>
+          <div className="card card-muted">
+            <div className="card-header">
+              <div className="h2">Resumo dos alertas</div>
             </div>
 
-            <div>
-              <div className="small">CNPJ *</div>
-              <input
-                className="input"
-                value={form.cnpj}
-                onChange={e => onChange('cnpj', e.target.value)}
-                placeholder="00.000.000/0000-00"
-              />
+            <div className="kpis">
+              <div className="kpi">
+                <div className="small">Total de registros</div>
+                <div className="v">{stats.total}</div>
+              </div>
+              <div className="kpi">
+                <div className="small">Enviados / concluídos</div>
+                <div className="v">{stats.sent}</div>
+              </div>
+              <div className="kpi">
+                <div className="small">Falhas</div>
+                <div className="v">{stats.failed}</div>
+              </div>
+            </div>
+
+            <div className="notice notice-info" style={{ marginTop: 14 }}>
+              Este painel apresenta os alertas e notificações emitidos pelo sistema para acompanhamento administrativo.
             </div>
           </div>
 
-          <div className="small" style={{ fontWeight: 900, margin: '14px 0 10px' }}>Contrato</div>
+          <div className="card">
+            <div className="h2" style={{ marginBottom: 12 }}>Filtros de consulta</div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <div className="small">Nº Contrato *</div>
-              <input
-                className="input"
-                value={form.numero_contrato}
-                onChange={e => onChange('numero_contrato', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="small">Status</div>
-              <select
-                className="input"
-                value={form.status}
-                onChange={e => onChange('status', e.target.value)}
-              >
-                <option value="ATIVO">ATIVO</option>
-                <option value="SUSPENSO">SUSPENSO</option>
-                <option value="ENCERRADO">ENCERRADO</option>
-              </select>
-            </div>
-
-            <div>
-              <div className="small">Data início *</div>
-              <input
-                className="input"
-                type="date"
-                value={form.data_inicio}
-                onChange={e => onChange('data_inicio', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="small">Data fim *</div>
-              <input
-                className="input"
-                type="date"
-                value={form.data_fim}
-                onChange={e => onChange('data_fim', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <div className="small">Valor inicial *</div>
-              <input
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.valor_inicial}
-                onChange={e => onChange('valor_inicial', e.target.value)}
-                placeholder="Ex.: 10000"
-              />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'end', gap: 10 }}>
-              <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="form-grid">
+              <div className="form-full">
+                <div className="label">Pesquisar</div>
                 <input
-                  type="checkbox"
-                  checked={form.renovavel}
-                  onChange={e => onChange('renovavel', e.target.checked)}
+                  className="input"
+                  value={filters.q}
+                  onChange={e => setFilter('q', e.target.value)}
+                  placeholder="Pesquisar por contrato, tipo, destinatário ou erro"
                 />
-                Renovável
-              </label>
+              </div>
+
+              <div>
+                <div className="label">Tipo de alerta</div>
+                <select
+                  className="input"
+                  value={filters.type}
+                  onChange={e => setFilter('type', e.target.value)}
+                >
+                  <option value="">Todos</option>
+                  {availableTypes.map(type => (
+                    <option key={type} value={type}>
+                      {getAlertTypeLabel(type)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="label">Situação</div>
+                <select
+                  className="input"
+                  value={filters.status}
+                  onChange={e => setFilter('status', e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  <option value="SUCCESS">Enviado / concluído</option>
+                  <option value="SENT">Enviado / concluído</option>
+                  <option value="OK">Enviado / concluído</option>
+                  <option value="PENDING">Pendente</option>
+                  <option value="ERROR">Erro / falha</option>
+                  <option value="FAILED">Erro / falha</option>
+                </select>
+              </div>
             </div>
 
+            <div className="actions" style={{ marginTop: 14 }}>
+              <button className="btn" onClick={load} disabled={loading}>
+                {loading ? 'Consultando...' : 'Aplicar filtros'}
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={clearFilters}>
+                Limpar filtros
+              </button>
+              <span className="badge">{filtered.length} registro(s)</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
             <div>
-              <div className="small">Gestor</div>
-              <select
-                className="input"
-                value={form.gestor_id}
-                onChange={e => onChange('gestor_id', e.target.value)}
-                disabled={loadingUsers}
-              >
-                <option value="">—</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} ({u.role})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <div className="small">Fiscal</div>
-              <select
-                className="input"
-                value={form.fiscal_id}
-                onChange={e => onChange('fiscal_id', e.target.value)}
-                disabled={loadingUsers}
-              >
-                <option value="">—</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} ({u.role})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ gridColumn: '1 / -1' }}>
-              <div className="small">Objeto</div>
-              <input
-                className="input"
-                value={form.objeto}
-                onChange={e => onChange('objeto', e.target.value)}
-              />
-            </div>
-
-            <div style={{ gridColumn: '1 / -1' }}>
-              <div className="small">Observações</div>
-              <textarea
-                className="input"
-                rows="3"
-                value={form.observacoes}
-                onChange={e => onChange('observacoes', e.target.value)}
-              />
+              <div className="h2">Histórico de alertas</div>
+              <div className="small">Consulta consolidada das notificações registradas</div>
             </div>
           </div>
 
-          {error && (
-            <div style={{ marginTop: 10, fontSize: 13, fontWeight: 800, color: '#b42318' }}>
-              {error}
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Data e hora</th>
+                  <th>Descrição</th>
+                  <th>Situação</th>
+                  <th>Destinatários</th>
+                  <th>Detalhes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(r => {
+                  const summary = buildAlertSummary(r)
+
+                  return (
+                    <React.Fragment key={r.id}>
+                      <tr className="row">
+                        <td>{formatDateTime(r.created_at)}</td>
+
+                        <td>
+                          <div style={{ fontWeight: 900 }}>{summary.title}</div>
+                          <div className="small">{summary.subtitle}</div>
+                        </td>
+
+                        <td>
+                          <span className={`badge ${String(r.status || '').toUpperCase() === 'PENDING' ? '' : 'badge-soft'}`}>
+                            {getStatusLabel(r.status)}
+                          </span>
+                          {r.error && (
+                            <div className="small" style={{ marginTop: 6, color: 'var(--danger)' }}>
+                              {r.error}
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
+                          <div className="small">{summary.recipients}</div>
+                        </td>
+
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setOpenId(prev => (prev === r.id ? null : r.id))}
+                          >
+                            {openId === r.id ? 'Ocultar' : 'Visualizar'}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {openId === r.id && (
+                        <tr>
+                          <td colSpan="5" style={{ padding: 14, background: '#FAFBFE' }}>
+                            <div className="panel">
+                              <div className="section-title">Detalhamento do alerta</div>
+
+                              <div className="info-list">
+                                <div className="info-item">
+                                  <div className="info-label">Tipo</div>
+                                  <div className="info-value">{getAlertTypeLabel(r.alert_type)}</div>
+                                </div>
+
+                                <div className="info-item">
+                                  <div className="info-label">Situação</div>
+                                  <div className="info-value">{getStatusLabel(r.status)}</div>
+                                </div>
+
+                                <div className="info-item">
+                                  <div className="info-label">Contrato relacionado</div>
+                                  <div className="info-value">{r.contract_id ?? 'Não informado'}</div>
+                                </div>
+
+                                <div className="info-item">
+                                  <div className="info-label">Destinatários</div>
+                                  <div className="info-value">
+                                    {Array.isArray(r.recipients)
+                                      ? r.recipients.join(', ')
+                                      : r.recipients || 'Não informado'}
+                                  </div>
+                                </div>
+
+                                {r.error && (
+                                  <div className="info-item">
+                                    <div className="info-label">Mensagem de erro</div>
+                                    <div className="info-value" style={{ color: 'var(--danger)' }}>
+                                      {r.error}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="info-item">
+                                  <div className="info-label">Metadados</div>
+                                  <pre
+                                    style={{
+                                      margin: 0,
+                                      whiteSpace: 'pre-wrap',
+                                      wordBreak: 'break-word',
+                                      fontSize: 12,
+                                      lineHeight: 1.5,
+                                    }}
+                                  >
+{JSON.stringify(r.meta || {}, null, 2)}
+                                  </pre>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan="5">
+                      <div className="empty-state">
+                        Nenhum alerta encontrado para os critérios informados.
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {stats.pending > 0 && (
+            <div className="notice notice-info" style={{ marginTop: 16 }}>
+              Há registros pendentes que merecem acompanhamento administrativo.
             </div>
           )}
 
-          {msg && (
-            <div className="small" style={{ marginTop: 10, fontWeight: 900 }}>
-              {msg}
+          {stats.failed > 0 && (
+            <div className="notice notice-error" style={{ marginTop: 12 }}>
+              Existem alertas com falha ou erro no processamento. Recomenda-se verificação.
             </div>
           )}
-
-          <button className="btn" style={{ marginTop: 14 }} disabled={loading}>
-            {loading ? 'Salvando...' : 'Salvar contrato'}
-          </button>
-        </form>
+        </div>
       </div>
     </div>
   )
