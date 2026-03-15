@@ -1,73 +1,197 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
-export default function Users(){
+function roleLabel(role) {
+  if (role === 'ADMIN') return 'Administrador'
+  if (role === 'GESTOR') return 'Gestor'
+  if (role === 'FISCAL') return 'Fiscal'
+  if (role === 'CONSULTA') return 'Consulta'
+  return role || '—'
+}
+
+export default function Users() {
   const api = useApi()
   const { user } = useAuth()
-  const [users, setUsers] = useState([])
-  const [msg, setMsg] = useState('')
-  const [form, setForm] = useState({ name:'', email:'', role:'GESTOR', password:'', active:true })
-  const [loading, setLoading] = useState(false)
 
   const isAdmin = user?.role === 'ADMIN'
 
-  async function load(){
-    setLoading(true)
-    try{
-      const j = await api.getUsers()
-      setUsers(Array.isArray(j)?j:[])
-    } catch(e){
-      setMsg(e.message||'Erro')
-    } finally { setLoading(false) }
-  }
-  useEffect(()=>{ load() },[])
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [msgType, setMsgType] = useState('info')
+  const [q, setQ] = useState('')
 
-  async function create(e){
+  const [newUser, setNewUser] = useState({
+    name: '',
+    email: '',
+    role: 'CONSULTA',
+    password: '',
+    active: true,
+  })
+
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({
+    name: '',
+    role: 'CONSULTA',
+    password: '',
+    active: true,
+  })
+
+  async function load() {
+    setLoading(true)
+    setMsg('')
+    try {
+      const j = await api.getUsers()
+      setRows(Array.isArray(j) ? j : [])
+    } catch (e) {
+      setMsgType('error')
+      setMsg(e.message || 'Não foi possível carregar os usuários.')
+      setRows([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isAdmin) load()
+  }, [isAdmin])
+
+  function resetNewUser() {
+    setNewUser({
+      name: '',
+      email: '',
+      role: 'CONSULTA',
+      password: '',
+      active: true,
+    })
+  }
+
+  function validateNewUser() {
+    if (!newUser.name.trim()) return 'Informe o nome do usuário.'
+    if (!newUser.email.trim()) return 'Informe o e-mail do usuário.'
+    if (!newUser.role) return 'Informe o perfil de acesso.'
+    return ''
+  }
+
+  async function submitNewUser(e) {
     e.preventDefault()
     setMsg('')
-    try{
-      await api.request('/users', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(form)
-      })
-      setForm({ name:'', email:'', role:'GESTOR', password:'', active:true })
+
+    const validationError = validateNewUser()
+    if (validationError) {
+      setMsgType('error')
+      setMsg(validationError)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const payload = {
+        name: newUser.name.trim(),
+        email: newUser.email.trim(),
+        role: newUser.role,
+        password: newUser.password.trim() || undefined,
+        active: !!newUser.active,
+      }
+
+      await api.createUser(payload)
+      setMsgType('success')
+      setMsg('Usuário cadastrado com sucesso.')
+      resetNewUser()
       await load()
-    } catch(e){
-      setMsg(e.message||'Erro ao criar')
+    } catch (e) {
+      setMsgType('error')
+      setMsg(e.message || 'Não foi possível cadastrar o usuário.')
+    } finally {
+      setSaving(false)
     }
   }
 
-  async function toggleActive(u){
-    try{
-      await api.updateUser(u.id, { active: !u.active })
+  function startEdit(row) {
+    setEditingId(row.id)
+    setEditForm({
+      name: row.name || '',
+      role: row.role || 'CONSULTA',
+      password: '',
+      active: !!row.active,
+    })
+    setMsg('')
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditForm({
+      name: '',
+      role: 'CONSULTA',
+      password: '',
+      active: true,
+    })
+  }
+
+  async function saveEdit(id) {
+    setMsg('')
+    if (!editForm.name.trim()) {
+      setMsgType('error')
+      setMsg('Informe o nome do usuário.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        role: editForm.role,
+        active: !!editForm.active,
+      }
+
+      if (editForm.password.trim()) {
+        payload.password = editForm.password.trim()
+      }
+
+      await api.updateUser(id, payload)
+      setMsgType('success')
+      setMsg('Usuário atualizado com sucesso.')
+      cancelEdit()
       await load()
-    } catch(e){
-      setMsg(e.message||'Erro')
+    } catch (e) {
+      setMsgType('error')
+      setMsg(e.message || 'Não foi possível atualizar o usuário.')
+    } finally {
+      setSaving(false)
     }
   }
 
-  async function resetPassword(u){
-    const p = prompt('Nova senha para '+u.email+':')
-    if(!p) return
-    try{
-      await api.updateUser(u.id, { password: p })
-      alert('Senha atualizada')
-    } catch(e){
-      setMsg(e.message||'Erro')
-    }
-  }
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase()
+    if (!s) return rows
 
-  if(!isAdmin){
+    return rows.filter(r =>
+      (r.name || '').toLowerCase().includes(s) ||
+      (r.email || '').toLowerCase().includes(s) ||
+      (r.role || '').toLowerCase().includes(s)
+    )
+  }, [rows, q])
+
+  if (!isAdmin) {
     return (
       <div className="container">
         <div className="topbar">
-          <div className="brand"><div className="logo" /><div><div className="h1">Usuários</div><div className="small">Acesso restrito</div></div></div>
-          <Link className="btn" to="/">Voltar</Link>
+          <div className="brand">
+            <div className="logo" />
+            <div>
+              <div className="h1">Gestão de usuários</div>
+              <div className="small">Acesso restrito</div>
+            </div>
+          </div>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
-        <div className="card"><div style={{fontWeight:900}}>Somente ADMIN.</div></div>
+
+        <div className="notice notice-info">
+          Esta área está disponível somente para perfis administrativos.
+        </div>
       </div>
     )
   }
@@ -75,59 +199,289 @@ export default function Users(){
   return (
     <div className="container">
       <div className="topbar">
-        <div className="brand"><div className="logo" /><div><div className="h1">Usuários</div><div className="small">Cadastro e permissões</div></div></div>
-        <Link className="btn" to="/">Voltar</Link>
+        <div className="brand">
+          <div className="logo" />
+          <div>
+            <div className="h1">Gestão de usuários</div>
+            <div className="small">Administração de perfis de acesso ao sistema</div>
+          </div>
+        </div>
+
+        <div className="actions">
+          <button className="btn btn-secondary" onClick={load} disabled={loading}>
+            {loading ? 'Atualizando...' : 'Atualizar dados'}
+          </button>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
+        </div>
       </div>
 
-      <div className="grid" style={{gridTemplateColumns:'420px 1fr'}}>
-        <div className="card">
-          <div style={{fontWeight:900, marginBottom:10}}>Novo usuário</div>
-          <form onSubmit={create}>
-            <div className="small">Nome</div>
-            <input className="input" value={form.name} onChange={e=>setForm(prev=>({...prev,name:e.target.value}))} />
-            <div className="small" style={{marginTop:10}}>E-mail</div>
-            <input className="input" value={form.email} onChange={e=>setForm(prev=>({...prev,email:e.target.value}))} />
-            <div className="small" style={{marginTop:10}}>Perfil</div>
-            <select className="input" value={form.role} onChange={e=>setForm(prev=>({...prev,role:e.target.value}))}>
-              <option value="ADMIN">ADMIN</option>
-              <option value="GESTOR">GESTOR</option>
-              <option value="FISCAL">FISCAL</option>
-              <option value="CONSULTA">CONSULTA</option>
-            </select>
-            <div className="small" style={{marginTop:10}}>Senha (opcional)</div>
-            <input className="input" type="password" value={form.password} onChange={e=>setForm(prev=>({...prev,password:e.target.value}))} />
-            <button className="btn" style={{marginTop:12, width:'100%'}}>Criar</button>
-          </form>
-          {msg && <div className="small" style={{fontWeight:900, marginTop:10}}>{msg}</div>}
+      {msg && (
+        <div
+          className={`notice ${
+            msgType === 'success'
+              ? 'notice-success'
+              : msgType === 'error'
+              ? 'notice-error'
+              : 'notice-info'
+          }`}
+          style={{ marginBottom: 16 }}
+        >
+          {msg}
+        </div>
+      )}
+
+      <div className="grid">
+        <div>
+          <div className="card">
+            <div className="h2" style={{ marginBottom: 12 }}>Novo usuário</div>
+            <div className="small" style={{ marginBottom: 14 }}>
+              Cadastre novos usuários e defina o perfil de acesso correspondente.
+            </div>
+
+            <form onSubmit={submitNewUser}>
+              <div className="panel" style={{ marginBottom: 14 }}>
+                <div className="section-title">Dados de acesso</div>
+                <div className="form-grid">
+                  <div className="form-full">
+                    <div className="label">Nome</div>
+                    <input
+                      className="input"
+                      value={newUser.name}
+                      onChange={e => setNewUser(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="form-full">
+                    <div className="label">E-mail</div>
+                    <input
+                      className="input"
+                      type="email"
+                      value={newUser.email}
+                      onChange={e => setNewUser(prev => ({ ...prev, email: e.target.value }))}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="label">Perfil</div>
+                    <select
+                      className="input"
+                      value={newUser.role}
+                      onChange={e => setNewUser(prev => ({ ...prev, role: e.target.value }))}
+                    >
+                      <option value="ADMIN">Administrador</option>
+                      <option value="GESTOR">Gestor</option>
+                      <option value="FISCAL">Fiscal</option>
+                      <option value="CONSULTA">Consulta</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="label">Senha inicial</div>
+                    <input
+                      className="input"
+                      type="password"
+                      value={newUser.password}
+                      onChange={e => setNewUser(prev => ({ ...prev, password: e.target.value }))}
+                      placeholder="Opcional"
+                    />
+                  </div>
+
+                  <div className="form-full" style={{ display: 'flex', alignItems: 'end' }}>
+                    <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700 }}>
+                      <input
+                        type="checkbox"
+                        checked={newUser.active}
+                        onChange={e => setNewUser(prev => ({ ...prev, active: e.target.checked }))}
+                      />
+                      Usuário ativo
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="actions">
+                <button className="btn" disabled={saving}>
+                  {saving ? 'Salvando...' : 'Cadastrar usuário'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="card card-muted">
+            <div className="h2" style={{ marginBottom: 12 }}>Perfis de acesso</div>
+
+            <div className="info-list">
+              <div className="info-item">
+                <div className="info-value">Administrador</div>
+                <div className="small">Acesso completo ao sistema, inclusive usuários, auditoria, alertas e contratos.</div>
+              </div>
+              <div className="info-item">
+                <div className="info-value">Gestor</div>
+                <div className="small">Consulta ampla e lançamento de movimentações em contratos vinculados.</div>
+              </div>
+              <div className="info-item">
+                <div className="info-value">Fiscal</div>
+                <div className="small">Consulta ampla e lançamento de movimentações em contratos vinculados.</div>
+              </div>
+              <div className="info-item">
+                <div className="info-value">Consulta</div>
+                <div className="small">Perfil destinado apenas à visualização das informações.</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="card">
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
-            <div style={{fontWeight:900}}>Lista</div>
-            <button className="btn" onClick={load} disabled={loading}>{loading?'...':'Atualizar'}</button>
+          <div className="card-header">
+            <div>
+              <div className="h2">Usuários cadastrados</div>
+              <div className="small">Consulta e atualização dos acessos existentes</div>
+            </div>
+            <div className="badge">{filtered.length} registro(s)</div>
           </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Nome</th><th>E-mail</th><th>Perfil</th><th>Ativo</th><th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u=>(
-                <tr key={u.id} className="row">
-                  <td style={{fontWeight:900}}>{u.name}</td>
-                  <td>{u.email}</td>
-                  <td>{u.role}</td>
-                  <td>{u.active ? 'SIM':'NÃO'}</td>
-                  <td style={{display:'flex', gap:8}}>
-                    <button className="btn" onClick={()=>toggleActive(u)}>{u.active?'Desativar':'Ativar'}</button>
-                    <button className="btn" onClick={()=>resetPassword(u)}>Senha</button>
-                  </td>
+
+          <div style={{ marginBottom: 14 }}>
+            <div className="label">Pesquisar por nome, e-mail ou perfil</div>
+            <input
+              className="input"
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Ex.: Maria, joao@empresa.com, ADMIN"
+            />
+          </div>
+
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Usuário</th>
+                  <th>Perfil</th>
+                  <th>Situação</th>
+                  <th>Ações</th>
                 </tr>
-              ))}
-              {users.length===0 && <tr><td colSpan="5" className="small" style={{padding:16}}>Sem usuários</td></tr>}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map(r => (
+                  <React.Fragment key={r.id}>
+                    <tr className="row">
+                      <td>
+                        <div style={{ fontWeight: 900 }}>{r.name}</div>
+                        <div className="small">{r.email}</div>
+                      </td>
+
+                      <td>
+                        <span className="badge">{roleLabel(r.role)}</span>
+                      </td>
+
+                      <td>
+                        <span className={`badge ${r.active ? 'badge-soft' : ''}`}>
+                          {r.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+
+                      <td>
+                        {editingId === r.id ? (
+                          <div className="actions">
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={() => saveEdit(r.id)}
+                              disabled={saving}
+                            >
+                              Salvar
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={cancelEdit}
+                              disabled={saving}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => startEdit(r)}
+                          >
+                            Editar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+
+                    {editingId === r.id && (
+                      <tr>
+                        <td colSpan="4" style={{ background: '#FAFBFE', padding: 14 }}>
+                          <div className="panel">
+                            <div className="section-title">Atualização do usuário</div>
+
+                            <div className="form-grid">
+                              <div>
+                                <div className="label">Nome</div>
+                                <input
+                                  className="input"
+                                  value={editForm.name}
+                                  onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                                />
+                              </div>
+
+                              <div>
+                                <div className="label">Perfil</div>
+                                <select
+                                  className="input"
+                                  value={editForm.role}
+                                  onChange={e => setEditForm(prev => ({ ...prev, role: e.target.value }))}
+                                >
+                                  <option value="ADMIN">Administrador</option>
+                                  <option value="GESTOR">Gestor</option>
+                                  <option value="FISCAL">Fiscal</option>
+                                  <option value="CONSULTA">Consulta</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <div className="label">Nova senha</div>
+                                <input
+                                  className="input"
+                                  type="password"
+                                  value={editForm.password}
+                                  onChange={e => setEditForm(prev => ({ ...prev, password: e.target.value }))}
+                                  placeholder="Preencha apenas se desejar alterar"
+                                />
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'end' }}>
+                                <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 700 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={editForm.active}
+                                    onChange={e => setEditForm(prev => ({ ...prev, active: e.target.checked }))}
+                                  />
+                                  Usuário ativo
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan="4">
+                      <div className="empty-state">
+                        Nenhum usuário encontrado para os critérios informados.
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
