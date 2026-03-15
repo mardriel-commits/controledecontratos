@@ -1,7 +1,7 @@
 import datetime as dt
 from decimal import Decimal
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from sqlalchemy import select, func, case
 
 from .db import SessionLocal
@@ -199,6 +199,147 @@ def create_contract():
         log_audit(db, g.user_id, 'CREATE', 'contract', c.id, {'numero_contrato': c.numero_contrato, 'cnpj': cnpj_digits})
         db.commit()
         return jsonify({"id": c.id, "numero_contrato": c.numero_contrato}), 201
+    finally:
+        db.close()
+@api_bp.patch("/contracts/<int:contract_id>")
+@auth_required
+@roles_required("ADMIN")
+def update_contract(contract_id: int):
+    db = SessionLocal()
+    try:
+        data = request.get_json(force=True) or {}
+
+        c = db.execute(select(Contract).where(Contract.id == contract_id)).scalars().first()
+        if not c:
+            return jsonify({"error": "Contrato não encontrado"}), 404
+
+        comp = db.execute(select(Company).where(Company.id == c.company_id)).scalars().first()
+        if not comp:
+            return jsonify({"error": "Empresa do contrato não encontrada"}), 404
+
+        before = {
+            "razao_social": comp.razao_social,
+            "cnpj": comp.cnpj,
+            "numero_contrato": c.numero_contrato,
+            "objeto": c.objeto,
+            "data_inicio": c.data_inicio.isoformat() if c.data_inicio else None,
+            "data_fim": c.data_fim.isoformat() if c.data_fim else None,
+            "status": c.status,
+            "renovavel": c.renovavel,
+            "valor_inicial": float(c.valor_inicial or 0),
+            "gestor_id": c.gestor_id,
+            "fiscal_id": c.fiscal_id,
+            "observacoes": c.observacoes,
+        }
+
+        if "razao_social" in data and data["razao_social"] is not None:
+            razao_social = str(data["razao_social"]).strip()
+            if not razao_social:
+                return jsonify({"error": "razao_social não pode ser vazio"}), 400
+            comp.razao_social = razao_social
+
+        if "cnpj" in data and data["cnpj"] is not None:
+            cnpj = str(data["cnpj"]).strip()
+            cnpj_digits = "".join([ch for ch in cnpj if ch.isdigit()])
+            if not cnpj_digits:
+                return jsonify({"error": "cnpj inválido"}), 400
+            comp.cnpj = cnpj_digits
+
+        if "numero_contrato" in data and data["numero_contrato"] is not None:
+            numero_contrato = str(data["numero_contrato"]).strip()
+            if not numero_contrato:
+                return jsonify({"error": "numero_contrato não pode ser vazio"}), 400
+
+            exists = db.execute(
+                select(Contract).where(
+                    Contract.numero_contrato == numero_contrato,
+                    Contract.id != contract_id
+                )
+            ).scalars().first()
+
+            if exists:
+                return jsonify({"error": "numero_contrato já cadastrado"}), 409
+
+            c.numero_contrato = numero_contrato
+
+        if "objeto" in data:
+            objeto = (data.get("objeto") or "").strip() or None
+            c.objeto = objeto
+
+        if "status" in data and data["status"] is not None:
+            status = str(data["status"]).strip().upper()
+            if status not in ("ATIVO", "SUSPENSO", "ENCERRADO"):
+                return jsonify({"error": "status inválido"}), 400
+            c.status = status
+
+        if "renovavel" in data:
+            c.renovavel = bool(data["renovavel"])
+
+        if "valor_inicial" in data and data["valor_inicial"] is not None:
+            valor_inicial = _dec(data["valor_inicial"])
+            if valor_inicial <= 0:
+                return jsonify({"error": "valor_inicial deve ser > 0"}), 400
+            c.valor_inicial = valor_inicial
+
+        nova_data_inicio = c.data_inicio
+        nova_data_fim = c.data_fim
+
+        if "data_inicio" in data and data["data_inicio"]:
+            try:
+                nova_data_inicio = dt.date.fromisoformat(data["data_inicio"])
+            except Exception:
+                return jsonify({"error": "data_inicio inválida (use YYYY-MM-DD)"}), 400
+
+        if "data_fim" in data and data["data_fim"]:
+            try:
+                nova_data_fim = dt.date.fromisoformat(data["data_fim"])
+            except Exception:
+                return jsonify({"error": "data_fim inválida (use YYYY-MM-DD)"}), 400
+
+        if nova_data_fim < nova_data_inicio:
+            return jsonify({"error": "data_fim não pode ser menor que data_inicio"}), 400
+
+        c.data_inicio = nova_data_inicio
+        c.data_fim = nova_data_fim
+
+        if "gestor_id" in data:
+            gestor_id = data.get("gestor_id")
+            c.gestor_id = int(gestor_id) if gestor_id else None
+
+        if "fiscal_id" in data:
+            fiscal_id = data.get("fiscal_id")
+            c.fiscal_id = int(fiscal_id) if fiscal_id else None
+
+        if "observacoes" in data:
+            c.observacoes = (data.get("observacoes") or None)
+
+        db.commit()
+        db.refresh(c)
+        db.refresh(comp)
+
+        after = {
+            "razao_social": comp.razao_social,
+            "cnpj": comp.cnpj,
+            "numero_contrato": c.numero_contrato,
+            "objeto": c.objeto,
+            "data_inicio": c.data_inicio.isoformat() if c.data_inicio else None,
+            "data_fim": c.data_fim.isoformat() if c.data_fim else None,
+            "status": c.status,
+            "renovavel": c.renovavel,
+            "valor_inicial": float(c.valor_inicial or 0),
+            "gestor_id": c.gestor_id,
+            "fiscal_id": c.fiscal_id,
+            "observacoes": c.observacoes,
+        }
+
+        log_audit(db, g.user_id, "UPDATE", "contract", c.id, {"before": before, "after": after})
+        db.commit()
+
+        return jsonify({
+            "id": c.id,
+            "numero_contrato": c.numero_contrato,
+            "message": "Contrato atualizado com sucesso"
+        })
     finally:
         db.close()
 
