@@ -89,11 +89,7 @@ export default function Dashboard() {
           {isAdmin && <Link className="btn" to="/audit">Auditoria</Link>}
           {isAdmin && <Link className="btn" to="/alerts">Alertas</Link>}
 
-          <button
-            className="btn"
-            onClick={load}
-            disabled={loading}
-          >
+          <button className="btn" onClick={load} disabled={loading}>
             {loading ? 'Atualizando...' : 'Atualizar'}
           </button>
 
@@ -214,9 +210,6 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
-    </div>
-  )
-}
     </div>
   )
 }
