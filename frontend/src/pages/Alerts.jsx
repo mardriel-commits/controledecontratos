@@ -433,7 +433,7 @@ export default function Alerts() {
                             </div>
                           </td>
                         </tr>
-                      )
+                      )}
                     </React.Fragment>
                   )
                 })}
