@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import FeedbackMessage from '../components/FeedbackMessage'
+import PageLoader from '../components/PageLoader'
+import EmptyState from '../components/EmptyState'
 
 function roleLabel(role) {
   if (role === 'ADMIN') return 'Administrador'
@@ -189,9 +192,31 @@ export default function Users() {
           <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
 
-        <div className="notice notice-info">
+        <FeedbackMessage type="info">
           Esta área está disponível somente para perfis administrativos.
+        </FeedbackMessage>
+      </div>
+    )
+  }
+
+  if (loading && rows.length === 0) {
+    return (
+      <div className="container">
+        <div className="topbar">
+          <div className="brand">
+            <div className="logo" />
+            <div>
+              <div className="h1">Gestão de usuários</div>
+              <div className="small">Administração de acessos</div>
+            </div>
+          </div>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
+
+        <PageLoader
+          title="Carregando usuários"
+          subtitle="Os dados estão sendo preparados para consulta."
+        />
       </div>
     )
   }
@@ -215,23 +240,12 @@ export default function Users() {
         </div>
       </div>
 
-      {msg && (
-        <div
-          className={`notice ${
-            msgType === 'success'
-              ? 'notice-success'
-              : msgType === 'error'
-              ? 'notice-error'
-              : 'notice-info'
-          }`}
-          style={{ marginBottom: 16 }}
-        >
-          {msg}
-        </div>
-      )}
+      <FeedbackMessage type={msgType} style={{ marginBottom: 16 }}>
+        {msg}
+      </FeedbackMessage>
 
       <div className="grid">
-        <div>
+        <div className="stack">
           <div className="card">
             <div className="h2" style={{ marginBottom: 12 }}>Novo usuário</div>
             <div className="small" style={{ marginBottom: 14 }}>
@@ -313,7 +327,7 @@ export default function Users() {
             <div className="info-list">
               <div className="info-item">
                 <div className="info-value">Administrador</div>
-                <div className="small">Acesso completo ao sistema, inclusive usuários, auditoria, alertas e contratos.</div>
+                <div className="small">Acesso completo ao sistema, inclusive usuários, histórico, alertas e contratos.</div>
               </div>
               <div className="info-item">
                 <div className="info-value">Gestor</div>
@@ -381,7 +395,7 @@ export default function Users() {
 
                       <td>
                         {editingId === r.id ? (
-                          <div className="actions">
+                          <div className="table-actions">
                             <button
                               type="button"
                               className="btn"
@@ -473,9 +487,10 @@ export default function Users() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan="4">
-                      <div className="empty-state">
-                        Nenhum usuário encontrado para os critérios informados.
-                      </div>
+                      <EmptyState
+                        title="Nenhum usuário encontrado"
+                        description="Não há registros compatíveis com a pesquisa informada."
+                      />
                     </td>
                   </tr>
                 )}
