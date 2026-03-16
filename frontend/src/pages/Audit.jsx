@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import FeedbackMessage from '../components/FeedbackMessage'
+import PageLoader from '../components/PageLoader'
+import EmptyState from '../components/EmptyState'
 
 function formatDateTime(value) {
   if (!value) return '—'
@@ -62,6 +65,7 @@ export default function Audit() {
 
   const [rows, setRows] = useState([])
   const [msg, setMsg] = useState('')
+  const [msgType, setMsgType] = useState('info')
   const [loading, setLoading] = useState(false)
   const [openId, setOpenId] = useState(null)
 
@@ -97,6 +101,7 @@ export default function Audit() {
       const j = await api.getAudit(qs.toString() ? `?${qs.toString()}` : '')
       setRows(Array.isArray(j) ? j : [])
     } catch (e) {
+      setMsgType('error')
       setMsg(e.message || 'Não foi possível carregar o histórico de atividades.')
       setRows([])
     } finally {
@@ -135,9 +140,31 @@ export default function Audit() {
           <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
 
-        <div className="notice notice-info">
+        <FeedbackMessage type="info">
           Esta área está disponível somente para perfis administrativos.
+        </FeedbackMessage>
+      </div>
+    )
+  }
+
+  if (loading && rows.length === 0) {
+    return (
+      <div className="container">
+        <div className="topbar">
+          <div className="brand">
+            <div className="logo" />
+            <div>
+              <div className="h1">Histórico de atividades</div>
+              <div className="small">Registro consolidado das ações do sistema</div>
+            </div>
+          </div>
+          <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
+
+        <PageLoader
+          title="Carregando histórico"
+          subtitle="Os registros estão sendo preparados para consulta."
+        />
       </div>
     )
   }
@@ -154,6 +181,10 @@ export default function Audit() {
         </div>
         <Link className="btn btn-secondary" to="/">Voltar</Link>
       </div>
+
+      <FeedbackMessage type={msgType} style={{ marginBottom: 16 }}>
+        {msg}
+      </FeedbackMessage>
 
       <div className="card">
         <div className="h2" style={{ marginBottom: 12 }}>Filtros de consulta</div>
@@ -215,12 +246,6 @@ export default function Audit() {
           <span className="badge">{totalRows} registro(s)</span>
         </div>
 
-        {msg && (
-          <div className="notice notice-error" style={{ marginTop: 14 }}>
-            {msg}
-          </div>
-        )}
-
         <div className="table-wrap" style={{ marginTop: 16 }}>
           <table className="table">
             <thead>
@@ -271,9 +296,10 @@ export default function Audit() {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan="7">
-                    <div className="empty-state">
-                      Nenhum registro encontrado para os filtros selecionados.
-                    </div>
+                    <EmptyState
+                      title="Nenhum registro encontrado"
+                      description="Não há informações disponíveis para os filtros selecionados."
+                    />
                   </td>
                 </tr>
               )}
