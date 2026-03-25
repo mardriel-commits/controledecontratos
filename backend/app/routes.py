@@ -217,20 +217,28 @@ def create_contract():
         db.commit()
         db.refresh(c)
 
-        log_audit(
-            db,
-            g.user_id,
-            "CREATE",
-            "contract",
-            c.id,
-            {"numero_contrato": c.numero_contrato, "cnpj": cnpj_digits},
-        )
-        db.commit()
+        try:
+            log_audit(
+                db,
+                g.user_id,
+                "CREATE",
+                "contract",
+                c.id,
+                {"numero_contrato": c.numero_contrato, "cnpj": cnpj_digits},
+            )
+            db.commit()
+        except Exception as audit_err:
+            db.rollback()
+            print("ERRO_AUDIT_CREATE_CONTRACT:", repr(audit_err))
 
         return jsonify({"id": c.id, "numero_contrato": c.numero_contrato}), 201
+
+    except Exception as e:
+        db.rollback()
+        print("ERRO_CREATE_CONTRACT:", repr(e))
+        return jsonify({"error": f"create_contract_failed: {str(e)}"}), 500
     finally:
         db.close()
-
 
 @api_bp.patch("/contracts/<int:contract_id>")
 @auth_required
