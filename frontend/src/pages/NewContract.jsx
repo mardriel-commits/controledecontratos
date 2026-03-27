@@ -1,153 +1,168 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
-function formatDateTime(value) {
-  if (!value) return '—'
-  try {
-    return new Date(value).toLocaleString('pt-BR')
-  } catch {
-    return value
-  }
+const INITIAL_FORM = {
+  razao_social: '',
+  cnpj: '',
+  numero_contrato: '',
+  objeto: '',
+  data_inicio: '',
+  data_fim: '',
+  status: 'ATIVO',
+  renovavel: false,
+  valor_inicial: '',
+  valor_aditivado_acumulado: '',
+  gestor_id: '',
+  fiscal_id: '',
+  observacoes: '',
 }
 
-function getAlertTypeLabel(type) {
-  if (!type) return 'Não informado'
-
-  const map = {
-    VENCIMENTO_30_DIAS: 'Vencimento em até 30 dias',
-    VENCIMENTO_15_DIAS: 'Vencimento em até 15 dias',
-    VENCIMENTO_IMINENTE: 'Vencimento iminente',
-    CONTRATO_VENCIDO: 'Contrato vencido',
-    RENOVACAO_LIMITE: 'Limite de renovação',
-    ALERTA_MANUAL: 'Alerta manual',
-  }
-
-  return map[type] || type
+function onlyDigits(value) {
+  return String(value || '').replace(/\D/g, '')
 }
 
-function getStatusLabel(status) {
-  if (!status) return 'Não informado'
+function formatCurrencyInput(value) {
+  const digits = onlyDigits(value)
+  if (!digits) return ''
 
-  const map = {
-    SUCCESS: 'Enviado',
-    SENT: 'Enviado',
-    OK: 'Concluído',
-    ERROR: 'Erro',
-    FAILED: 'Falha',
-    PENDING: 'Pendente',
-  }
-
-  return map[status] || status
+  const number = Number(digits) / 100
+  return number.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
-function getStatusClass(status) {
-  const s = String(status || '').toUpperCase()
-
-  if (['SUCCESS', 'SENT', 'OK'].includes(s)) return 'notice-success'
-  if (['ERROR', 'FAILED'].includes(s)) return 'notice-error'
-  return 'notice-info'
+function parseCurrencyForApi(value) {
+  if (value == null || value === '') return '0'
+  return String(value).replace(/\./g, '').replace(',', '.')
 }
 
-function buildAlertSummary(row) {
-  const meta = row?.meta || {}
-  const contractId = row?.contract_id ?? meta?.contract_id ?? '—'
-  const recipients = Array.isArray(row?.recipients)
-    ? row.recipients.join(', ')
-    : row?.recipients || 'Não informado'
-
-  return {
-    title: getAlertTypeLabel(row.alert_type),
-    subtitle: `Contrato #${contractId}`,
-    recipients,
-  }
+function formatCNPJ(value) {
+  const digits = onlyDigits(value).slice(0, 14)
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
 }
 
-export default function Alerts() {
+export default function NewContract() {
   const api = useApi()
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const isAdmin = user?.role === 'ADMIN'
 
-  const [rows, setRows] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [form, setForm] = useState(INITIAL_FORM)
+  const [users, setUsers] = useState([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
-  const [openId, setOpenId] = useState(null)
+  const [success, setSuccess] = useState('')
 
-  const [filters, setFilters] = useState({
-    type: '',
-    status: '',
-    q: '',
-  })
-
-  async function load() {
-    setLoading(true)
+  async function loadUsers() {
+    setLoadingUsers(true)
     setMsg('')
     try {
-      const j = await api.getAlerts()
-      setRows(Array.isArray(j) ? j : [])
+      const data = await api.getUsers()
+      setUsers(Array.isArray(data) ? data.filter(u => u.active !== false) : [])
     } catch (e) {
-      setMsg(e.message || 'Não foi possível carregar os alertas.')
-      setRows([])
+      setUsers([])
+      setMsg(e?.message || 'Não foi possível carregar a lista de usuários.')
     } finally {
-      setLoading(false)
+      setLoadingUsers(false)
     }
   }
 
   useEffect(() => {
-    if (isAdmin) load()
+    if (isAdmin) {
+      loadUsers()
+    }
   }, [isAdmin])
 
-  function setFilter(key, value) {
-    setFilters(prev => ({ ...prev, [key]: value }))
+  const gestores = useMemo(() => {
+    return users.filter(u => ['ADMIN', 'GESTOR'].includes(String(u.role || '').toUpperCase()))
+  }, [users])
+
+  const fiscais = useMemo(() => {
+    return users.filter(u => ['ADMIN', 'FISCAL'].includes(String(u.role || '').toUpperCase()))
+  }, [users])
+
+  function updateField(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }))
   }
 
-  function clearFilters() {
-    setFilters({
-      type: '',
-      status: '',
-      q: '',
-    })
+  function handleCurrencyChange(field, value) {
+    updateField(field, formatCurrencyInput(value))
   }
 
-  const filtered = useMemo(() => {
-    const search = filters.q.trim().toLowerCase()
+  function handleSubmit(e) {
+    e.preventDefault()
+    submit()
+  }
 
-    return rows.filter(r => {
-      const matchType = !filters.type || r.alert_type === filters.type
-      const matchStatus = !filters.status || String(r.status || '').toUpperCase() === filters.status
+  async function submit() {
+    setMsg('')
+    setSuccess('')
 
-      const searchable = [
-        r.alert_type,
-        r.status,
-        r.contract_id,
-        Array.isArray(r.recipients) ? r.recipients.join(' ') : r.recipients,
-        r.error,
-        JSON.stringify(r.meta || {}),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
+    if (!form.razao_social.trim()) {
+      setMsg('Informe a razão social.')
+      return
+    }
+    if (!onlyDigits(form.cnpj)) {
+      setMsg('Informe o CNPJ.')
+      return
+    }
+    if (!form.numero_contrato.trim()) {
+      setMsg('Informe o número do contrato.')
+      return
+    }
+    if (!form.data_inicio) {
+      setMsg('Informe a data de início.')
+      return
+    }
+    if (!form.data_fim) {
+      setMsg('Informe a data de fim.')
+      return
+    }
+    if (!form.valor_inicial) {
+      setMsg('Informe o valor inicial.')
+      return
+    }
 
-      const matchText = !search || searchable.includes(search)
+    const payload = {
+      razao_social: form.razao_social.trim(),
+      cnpj: onlyDigits(form.cnpj),
+      numero_contrato: form.numero_contrato.trim(),
+      objeto: form.objeto.trim(),
+      data_inicio: form.data_inicio,
+      data_fim: form.data_fim,
+      status: form.status,
+      renovavel: !!form.renovavel,
+      valor_inicial: parseCurrencyForApi(form.valor_inicial),
+      valor_aditivado_acumulado: parseCurrencyForApi(form.valor_aditivado_acumulado || '0'),
+      gestor_id: form.gestor_id ? Number(form.gestor_id) : null,
+      fiscal_id: form.fiscal_id ? Number(form.fiscal_id) : null,
+      observacoes: form.observacoes.trim(),
+    }
 
-      return matchType && matchStatus && matchText
-    })
-  }, [rows, filters])
+    setSaving(true)
+    try {
+      const created = await api.createContract(payload)
+      setSuccess(`Contrato ${created?.numero_contrato || ''} cadastrado com sucesso.`)
+      setForm(INITIAL_FORM)
 
-  const stats = useMemo(() => {
-    const total = rows.length
-    const sent = rows.filter(r => ['SUCCESS', 'SENT', 'OK'].includes(String(r.status || '').toUpperCase())).length
-    const failed = rows.filter(r => ['ERROR', 'FAILED'].includes(String(r.status || '').toUpperCase())).length
-    const pending = rows.filter(r => ['PENDING'].includes(String(r.status || '').toUpperCase())).length
-
-    return { total, sent, failed, pending }
-  }, [rows])
-
-  const availableTypes = useMemo(() => {
-    return Array.from(new Set(rows.map(r => r.alert_type).filter(Boolean)))
-  }, [rows])
+      setTimeout(() => {
+        navigate('/')
+      }, 1200)
+    } catch (e) {
+      setMsg(e?.message || 'Não foi possível cadastrar o contrato.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (!isAdmin) {
     return (
@@ -156,7 +171,7 @@ export default function Alerts() {
           <div className="brand">
             <div className="logo" />
             <div>
-              <div className="h1">Avisos e notificações</div>
+              <div className="h1">Novo contrato</div>
               <div className="small">Acesso restrito</div>
             </div>
           </div>
@@ -176,15 +191,12 @@ export default function Alerts() {
         <div className="brand">
           <div className="logo" />
           <div>
-            <div className="h1">Avisos e notificações</div>
-            <div className="small">Acompanhamento dos alertas gerados pelo sistema</div>
+            <div className="h1">Novo contrato</div>
+            <div className="small">Cadastro de contrato e vínculo com empresa</div>
           </div>
         </div>
 
         <div className="actions">
-          <button className="btn btn-secondary" onClick={load} disabled={loading}>
-            {loading ? 'Atualizando...' : 'Atualizar dados'}
-          </button>
           <Link className="btn btn-secondary" to="/">Voltar</Link>
         </div>
       </div>
@@ -195,241 +207,194 @@ export default function Alerts() {
         </div>
       )}
 
-      <div className="grid">
-        <div>
-          <div className="card card-muted">
-            <div className="card-header">
-              <div className="h2">Resumo dos alertas</div>
-            </div>
+      {success && (
+        <div className="notice notice-success" style={{ marginBottom: 16 }}>
+          {success}
+        </div>
+      )}
 
-            <div className="kpis">
-              <div className="kpi">
-                <div className="small">Total de registros</div>
-                <div className="v">{stats.total}</div>
-              </div>
-              <div className="kpi">
-                <div className="small">Enviados / concluídos</div>
-                <div className="v">{stats.sent}</div>
-              </div>
-              <div className="kpi">
-                <div className="small">Falhas</div>
-                <div className="v">{stats.failed}</div>
-              </div>
-            </div>
-
-            <div className="notice notice-info" style={{ marginTop: 14 }}>
-              Este painel apresenta os alertas e notificações emitidos pelo sistema para acompanhamento administrativo.
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="h2" style={{ marginBottom: 12 }}>Filtros de consulta</div>
-
-            <div className="form-grid">
-              <div className="form-full">
-                <div className="label">Pesquisar</div>
-                <input
-                  className="input"
-                  value={filters.q}
-                  onChange={e => setFilter('q', e.target.value)}
-                  placeholder="Pesquisar por contrato, tipo, destinatário ou erro"
-                />
-              </div>
-
-              <div>
-                <div className="label">Tipo de alerta</div>
-                <select
-                  className="input"
-                  value={filters.type}
-                  onChange={e => setFilter('type', e.target.value)}
-                >
-                  <option value="">Todos</option>
-                  {availableTypes.map(type => (
-                    <option key={type} value={type}>
-                      {getAlertTypeLabel(type)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <div className="label">Situação</div>
-                <select
-                  className="input"
-                  value={filters.status}
-                  onChange={e => setFilter('status', e.target.value)}
-                >
-                  <option value="">Todas</option>
-                  <option value="SUCCESS">Enviado / concluído</option>
-                  <option value="SENT">Enviado / concluído</option>
-                  <option value="OK">Enviado / concluído</option>
-                  <option value="PENDING">Pendente</option>
-                  <option value="ERROR">Erro / falha</option>
-                  <option value="FAILED">Erro / falha</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="actions" style={{ marginTop: 14 }}>
-              <button className="btn" onClick={load} disabled={loading}>
-                {loading ? 'Consultando...' : 'Aplicar filtros'}
-              </button>
-              <button className="btn btn-secondary" type="button" onClick={clearFilters}>
-                Limpar filtros
-              </button>
-              <span className="badge">{filtered.length} registro(s)</span>
-            </div>
+      <form onSubmit={handleSubmit} className="card">
+        <div className="card-header">
+          <div>
+            <div className="h2">Dados do contrato</div>
+            <div className="small">Preencha as informações principais para cadastro</div>
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="h2">Histórico de alertas</div>
-              <div className="small">Consulta consolidada das notificações registradas</div>
-            </div>
+        <div className="form-grid">
+          <div className="form-full">
+            <div className="label">Razão social *</div>
+            <input
+              className="input"
+              value={form.razao_social}
+              onChange={e => updateField('razao_social', e.target.value)}
+              placeholder="Nome da empresa"
+            />
           </div>
 
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Data e hora</th>
-                  <th>Descrição</th>
-                  <th>Situação</th>
-                  <th>Destinatários</th>
-                  <th>Detalhes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(r => {
-                  const summary = buildAlertSummary(r)
-
-                  return (
-                    <React.Fragment key={r.id}>
-                      <tr className="row">
-                        <td>{formatDateTime(r.created_at)}</td>
-
-                        <td>
-                          <div style={{ fontWeight: 900 }}>{summary.title}</div>
-                          <div className="small">{summary.subtitle}</div>
-                        </td>
-
-                        <td>
-                          <span className={`badge ${String(r.status || '').toUpperCase() === 'PENDING' ? '' : 'badge-soft'}`}>
-                            {getStatusLabel(r.status)}
-                          </span>
-                          {r.error && (
-                            <div className="small" style={{ marginTop: 6, color: 'var(--danger)' }}>
-                              {r.error}
-                            </div>
-                          )}
-                        </td>
-
-                        <td>
-                          <div className="small">{summary.recipients}</div>
-                        </td>
-
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => setOpenId(prev => (prev === r.id ? null : r.id))}
-                          >
-                            {openId === r.id ? 'Ocultar' : 'Visualizar'}
-                          </button>
-                        </td>
-                      </tr>
-
-                      {openId === r.id && (
-                        <tr>
-                          <td colSpan="5" style={{ padding: 14, background: '#FAFBFE' }}>
-                            <div className="panel">
-                              <div className="section-title">Detalhamento do alerta</div>
-
-                              <div className="info-list">
-                                <div className="info-item">
-                                  <div className="info-label">Tipo</div>
-                                  <div className="info-value">{getAlertTypeLabel(r.alert_type)}</div>
-                                </div>
-
-                                <div className="info-item">
-                                  <div className="info-label">Situação</div>
-                                  <div className="info-value">{getStatusLabel(r.status)}</div>
-                                </div>
-
-                                <div className="info-item">
-                                  <div className="info-label">Contrato relacionado</div>
-                                  <div className="info-value">{r.contract_id ?? 'Não informado'}</div>
-                                </div>
-
-                                <div className="info-item">
-                                  <div className="info-label">Destinatários</div>
-                                  <div className="info-value">
-                                    {Array.isArray(r.recipients)
-                                      ? r.recipients.join(', ')
-                                      : r.recipients || 'Não informado'}
-                                  </div>
-                                </div>
-
-                                {r.error && (
-                                  <div className="info-item">
-                                    <div className="info-label">Mensagem de erro</div>
-                                    <div className="info-value" style={{ color: 'var(--danger)' }}>
-                                      {r.error}
-                                    </div>
-                                  </div>
-                                )}
-
-                                <div className="info-item">
-                                  <div className="info-label">Metadados</div>
-                                  <pre
-                                    style={{
-                                      margin: 0,
-                                      whiteSpace: 'pre-wrap',
-                                      wordBreak: 'break-word',
-                                      fontSize: 12,
-                                      lineHeight: 1.5,
-                                    }}
-                                  >
-{JSON.stringify(r.meta || {}, null, 2)}
-                                  </pre>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  )
-                })}
-
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan="5">
-                      <div className="empty-state">
-                        Nenhum alerta encontrado para os critérios informados.
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div>
+            <div className="label">CNPJ *</div>
+            <input
+              className="input"
+              value={form.cnpj}
+              onChange={e => updateField('cnpj', formatCNPJ(e.target.value))}
+              placeholder="00.000.000/0000-00"
+              maxLength={18}
+            />
           </div>
 
-          {stats.pending > 0 && (
-            <div className="notice notice-info" style={{ marginTop: 16 }}>
-              Há registros pendentes que merecem acompanhamento administrativo.
-            </div>
-          )}
+          <div>
+            <div className="label">Número do contrato *</div>
+            <input
+              className="input"
+              value={form.numero_contrato}
+              onChange={e => updateField('numero_contrato', e.target.value)}
+              placeholder="Ex.: 012/2026"
+            />
+          </div>
 
-          {stats.failed > 0 && (
-            <div className="notice notice-error" style={{ marginTop: 12 }}>
-              Existem alertas com falha ou erro no processamento. Recomenda-se verificação.
-            </div>
-          )}
+          <div className="form-full">
+            <div className="label">Objeto</div>
+            <textarea
+              className="input"
+              rows={4}
+              value={form.objeto}
+              onChange={e => updateField('objeto', e.target.value)}
+              placeholder="Descreva o objeto do contrato"
+            />
+          </div>
+
+          <div>
+            <div className="label">Data de início *</div>
+            <input
+              className="input"
+              type="date"
+              value={form.data_inicio}
+              onChange={e => updateField('data_inicio', e.target.value)}
+            />
+          </div>
+
+          <div>
+            <div className="label">Data de fim *</div>
+            <input
+              className="input"
+              type="date"
+              value={form.data_fim}
+              onChange={e => updateField('data_fim', e.target.value)}
+            />
+          </div>
+
+          <div>
+            <div className="label">Status</div>
+            <select
+              className="input"
+              value={form.status}
+              onChange={e => updateField('status', e.target.value)}
+            >
+              <option value="ATIVO">ATIVO</option>
+              <option value="SUSPENSO">SUSPENSO</option>
+              <option value="ENCERRADO">ENCERRADO</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'end' }}>
+            <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={!!form.renovavel}
+                onChange={e => updateField('renovavel', e.target.checked)}
+              />
+              Contrato renovável
+            </label>
+          </div>
+
+          <div>
+            <div className="label">Valor inicial *</div>
+            <input
+              className="input"
+              value={form.valor_inicial}
+              onChange={e => handleCurrencyChange('valor_inicial', e.target.value)}
+              placeholder="0,00"
+              inputMode="numeric"
+            />
+          </div>
+
+          <div>
+            <div className="label">Valor aditivado acumulado</div>
+            <input
+              className="input"
+              value={form.valor_aditivado_acumulado}
+              onChange={e => handleCurrencyChange('valor_aditivado_acumulado', e.target.value)}
+              placeholder="0,00"
+              inputMode="numeric"
+            />
+          </div>
+
+          <div>
+            <div className="label">Gestor</div>
+            <select
+              className="input"
+              value={form.gestor_id}
+              onChange={e => updateField('gestor_id', e.target.value)}
+              disabled={loadingUsers}
+            >
+              <option value="">Selecione</option>
+              {gestores.map(u => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="label">Fiscal</div>
+            <select
+              className="input"
+              value={form.fiscal_id}
+              onChange={e => updateField('fiscal_id', e.target.value)}
+              disabled={loadingUsers}
+            >
+              <option value="">Selecione</option>
+              {fiscais.map(u => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-full">
+            <div className="label">Observações</div>
+            <textarea
+              className="input"
+              rows={4}
+              value={form.observacoes}
+              onChange={e => updateField('observacoes', e.target.value)}
+              placeholder="Informações adicionais"
+            />
+          </div>
         </div>
-      </div>
+
+        <div className="actions" style={{ marginTop: 18 }}>
+          <button className="btn" type="submit" disabled={saving}>
+            {saving ? 'Salvando...' : 'Cadastrar contrato'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={() => {
+              setForm(INITIAL_FORM)
+              setMsg('')
+              setSuccess('')
+            }}
+            disabled={saving}
+          >
+            Limpar
+          </button>
+          <Link className="btn btn-secondary" to="/">Cancelar</Link>
+        </div>
+      </form>
     </div>
   )
 }
