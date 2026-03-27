@@ -719,8 +719,7 @@ def list_alerts():
         return jsonify([]), 200
     finally:
         db.close()
-
-
+        
 @api_bp.patch("/users/<int:user_id>")
 @auth_required
 @roles_required("ADMIN")
