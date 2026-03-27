@@ -1,28 +1,23 @@
-from sqlalchemy import create_engine, text
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-database_url = os.getenv("DATABASE_URL", "")
-if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
+Base = declarative_base()
 
-engine = create_engine(database_url, pool_pre_ping=True)
+def get_database_url():
+    database_url = os.getenv("DATABASE_URL", "")
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
 
-SQL = """
-CREATE TABLE IF NOT EXISTS alerts_log (
-    id SERIAL PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    contract_id INTEGER NULL REFERENCES contracts(id),
-    alert_type VARCHAR(50) NOT NULL,
-    recipients JSON NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    error TEXT NULL,
-    meta JSON NULL
-);
+    if not database_url:
+        database_url = "sqlite:///./dev.db"
 
-CREATE INDEX IF NOT EXISTS ix_alerts_log_contract_id ON alerts_log (contract_id);
-"""
+    return database_url
 
-with engine.begin() as conn:
-    conn.execute(text(SQL))
+DATABASE_URL = get_database_url()
 
-print("Tabela alerts_log criada/verificada com sucesso.")
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
