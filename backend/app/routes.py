@@ -714,6 +714,9 @@ def list_alerts():
             }
             for a in rows
         ])
+    except Exception as e:
+        print("ERRO_LIST_ALERTS:", repr(e))
+        return jsonify([]), 200
     finally:
         db.close()
 
