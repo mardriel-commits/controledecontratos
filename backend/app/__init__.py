@@ -10,32 +10,26 @@ from .scheduler import init_scheduler
 def create_app():
     app = Flask(__name__)
 
-    app.config.from_mapping(
-        SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
-        ENVIRONMENT=os.getenv("ENVIRONMENT", "development"),
-        SMTP_HOST=os.getenv("SMTP_HOST"),
-        SMTP_PORT=int(os.getenv("SMTP_PORT", "587")),
-        SMTP_USER=os.getenv("SMTP_USER"),
-        SMTP_PASS=os.getenv("SMTP_PASS"),
-        SMTP_FROM=os.getenv("SMTP_FROM"),
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret")
+    app.config["JWT_SECRET"] = os.getenv("JWT_SECRET", "dev-jwt-secret")
+    app.config["ENVIRONMENT"] = os.getenv("ENVIRONMENT", "development")
+
+    app.config["SMTP_HOST"] = os.getenv("SMTP_HOST")
+    app.config["SMTP_PORT"] = os.getenv("SMTP_PORT", "587")
+    app.config["SMTP_USER"] = os.getenv("SMTP_USER")
+    app.config["SMTP_PASS"] = os.getenv("SMTP_PASS")
+    app.config["SMTP_FROM"] = os.getenv("SMTP_FROM")
+
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": "*"}},
+        supports_credentials=True,
     )
 
-    cors_origins = os.getenv("CORS_ORIGINS", "*")
-    origins = [o.strip() for o in cors_origins.split(",")] if cors_origins != "*" else "*"
-    CORS(app, resources={r"/api/*": {"origins": origins}}, supports_credentials=True)
-
     init_db()
-
-    app.register_blueprint(auth_bp, url_prefix="/api")
     app.register_blueprint(api_bp, url_prefix="/api")
+    init_scheduler(app)
 
-    @app.get("/")
-    def home():
-        return jsonify({"service": "sebrae-contratos-api", "status": "online"})
-
-    @app.get("/health")
-    def health():
-        return jsonify({"status": "ok"})
-
+    return app
     init_scheduler(app)
     return app
