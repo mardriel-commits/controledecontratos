@@ -7,6 +7,7 @@ from .routes import api_bp
 from .auth_routes import auth_bp
 from .scheduler import init_scheduler
 
+
 def create_app():
     app = Flask(__name__)
 
@@ -28,6 +29,7 @@ def create_app():
 
     init_db()
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
     init_scheduler(app)
 
     return app
