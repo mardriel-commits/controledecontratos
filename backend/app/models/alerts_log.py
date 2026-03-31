@@ -3,17 +3,14 @@ from sqlalchemy.sql import func
 from ..db import Base
 
 class AlertsLog(Base):
-    DROP TABLE IF EXISTS alerts_log;
+    __tablename__ = "alerts_log"
 
-    CREATE TABLE alerts_log (
-        id SERIAL PRIMARY KEY,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        contract_id INTEGER NULL REFERENCES contracts(id),
-        alert_type VARCHAR(50) NOT NULL,
-        recipients JSON NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-        error TEXT NULL,
-        meta JSON NULL
-    );
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True, index=True)
 
-    CREATE INDEX IF NOT EXISTS ix_alerts_log_contract_id ON alerts_log (contract_id);
+    alert_type = Column(String(50), nullable=False)
+    recipients = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=False, default="PENDING")
+    error = Column(Text, nullable=True)
+    meta = Column(JSON, nullable=True)
