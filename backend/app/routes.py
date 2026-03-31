@@ -403,14 +403,20 @@ def update_contract(contract_id: int):
     finally:
         db.close()
 
-
 @api_bp.post("/jobs/run-alerts")
 @auth_required
 @roles_required("ADMIN")
 def run_alerts_manual():
     from .scheduler import run_alerts
-    return jsonify(run_alerts(current_app))
-
+    try:
+        result = run_alerts(current_app)
+        return jsonify(result), 200
+    except Exception as e:
+        current_app.logger.exception("ERRO_RUN_ALERTS_MANUAL")
+        return jsonify({
+            "error": "run_alerts_failed",
+            "detail": str(e),
+        }), 500
 
 @api_bp.get("/users")
 @auth_required
@@ -425,7 +431,6 @@ def list_users():
         ])
     finally:
         db.close()
-
 
 @api_bp.post("/users")
 @auth_required
@@ -474,7 +479,6 @@ def _can_manage_contract(user_role: str, user_id: int, contract: Contract) -> bo
         return (contract.gestor_id == user_id) or (contract.fiscal_id == user_id)
     return False
 
-
 @api_bp.get("/contracts/<int:contract_id>/movements")
 @auth_required
 def list_movements(contract_id: int):
@@ -514,7 +518,6 @@ def list_movements(contract_id: int):
         ])
     finally:
         db.close()
-
 
 @api_bp.post("/contracts/<int:contract_id>/movements")
 @auth_required
@@ -586,7 +589,6 @@ def create_movement(contract_id: int):
     finally:
         db.close()
 
-
 # =========================
 # EXCLUIR MOVIMENTAÇÃO (ADMIN) - SOFT DELETE
 # =========================
@@ -626,7 +628,6 @@ def delete_movement(movement_id: int):
         return jsonify({"ok": True})
     finally:
         db.close()
-
 
 # =========================
 # AUDITORIA (ADMIN)
@@ -688,7 +689,6 @@ def list_audit():
         ])
     finally:
         db.close()
-
 
 # =========================
 # ALERTAS (ADMIN)
