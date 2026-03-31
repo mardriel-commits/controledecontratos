@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask
 from flask_cors import CORS
 import os
 
@@ -6,7 +6,6 @@ from .db import init_db
 from .routes import api_bp
 from .auth_routes import auth_bp
 from .scheduler import init_scheduler
-
 
 def create_app():
     app = Flask(__name__)
