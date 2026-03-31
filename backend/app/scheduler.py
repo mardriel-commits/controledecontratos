@@ -11,6 +11,9 @@ def run_alerts(app):
         db = SessionLocal()
         try:
             return run_contract_alerts(db)
+        except Exception as e:
+            app.logger.exception("ERRO_RUN_ALERTS")
+            raise e
         finally:
             db.close()
 
