@@ -13,6 +13,7 @@ auth_bp = Blueprint("auth_bp", __name__)
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 
+
 def _create_refresh_token(user_id: int, role: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {
@@ -24,7 +25,8 @@ def _create_refresh_token(user_id: int, role: str) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
-@auth_bp.post("/auth/login")
+
+@auth_bp.post("/login")
 def login():
     data = request.get_json(force=True) or {}
     email = (data.get("email") or "").strip().lower()
@@ -44,7 +46,12 @@ def login():
 
         resp = make_response(jsonify({
             "access_token": access_token,
-            "user": {"id": user.id, "name": user.name, "email": user.email, "role": user.role}
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "role": user.role
+            }
         }))
         resp.set_cookie(
             "refresh_token",
@@ -59,7 +66,8 @@ def login():
     finally:
         db.close()
 
-@auth_bp.post("/auth/refresh")
+
+@auth_bp.post("/refresh")
 def refresh():
     rt = request.cookies.get("refresh_token")
     if not rt:
@@ -75,13 +83,15 @@ def refresh():
     except Exception:
         return jsonify({"error": "Invalid or expired refresh token"}), 401
 
-@auth_bp.post("/auth/logout")
+
+@auth_bp.post("/logout")
 def logout():
     resp = make_response(jsonify({"ok": True}))
     resp.set_cookie("refresh_token", "", expires=0, path="/")
     return resp
 
-@auth_bp.get("/auth/me")
+
+@auth_bp.get("/me")
 @auth_required
 def me():
     db = SessionLocal()
@@ -89,6 +99,11 @@ def me():
         user = db.query(User).filter(User.id == g.user_id).first()
         if not user:
             return jsonify({"error": "User not found"}), 404
-        return jsonify({"id": user.id, "name": user.name, "email": user.email, "role": user.role})
+        return jsonify({
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role
+        })
     finally:
         db.close()
