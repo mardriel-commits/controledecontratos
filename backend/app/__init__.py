@@ -22,7 +22,11 @@ def create_app():
 
     CORS(
         app,
-        resources={r"/api/*": {"origins": "*"}},
+        resources={
+            r"/api/*": {
+                "origins": ["https://sebrae-contratos-web-2d4a.onrender.com"]
+            }
+        },
         supports_credentials=True,
     )
 
