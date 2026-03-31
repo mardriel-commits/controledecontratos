@@ -1,4 +1,5 @@
 import datetime as dt
+from decimal import Decimal
 
 from sqlalchemy import select
 
@@ -6,8 +7,7 @@ from ..models import Contract, Company, AlertsLog
 from ..services.balance import saldo_atual
 from .emailer import send_email
 
-SALDO_BAIXO_PERCENTUAL = 0.10  # 10%
-
+SALDO_BAIXO_PERCENTUAL = Decimal("0.10")  # 10%
 
 def build_email_html(contract, company, alert_type, dias_para_vencer=None, saldo=None):
     titulo = "Alerta de contrato"
@@ -108,9 +108,12 @@ def should_alert_by_deadline(contract, today):
 
 def should_alert_by_balance(db, contract):
     saldo = saldo_atual(db, contract.id, contract.valor_inicial, contract.valor_aditivado_acumulado)
-    limite_baixo = (contract.valor_inicial or 0) * SALDO_BAIXO_PERCENTUAL
+    saldo = saldo if saldo is not None else Decimal("0")
 
-    if saldo <= 0:
+    valor_inicial = contract.valor_inicial or Decimal("0")
+    limite_baixo = valor_inicial * Decimal("0.10")
+
+    if saldo <= Decimal("0"):
         return [("SALDO_ZERADO", saldo)]
 
     if saldo <= limite_baixo:
